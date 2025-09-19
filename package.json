@@ -1,0 +1,25 @@
+{
+  "name": "business-finder",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --bun --watch src/index.ts"
+  },
+  "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.2",
+    "@googlemaps/places": "^2.1.0",
+    "drizzle-orm": "^0.44.4"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^1.50.1",
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "drizzle-kit": "^0.31.4",
+    "postgres": "^3.4.7",
+    "prettier": "^3.6.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
