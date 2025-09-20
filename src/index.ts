@@ -6,7 +6,7 @@ import {
 } from "@googlemaps/google-maps-services-js";
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema, searchLogSchema } from "./db/schema";
-import { GERMANY_GRID } from "./lib/country-grid";
+import { GERMANY_GRID } from "./lib/germany-grid";
 import {
   exponentialBackoff,
   getSearchState,
