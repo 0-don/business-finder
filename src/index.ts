@@ -1,4 +1,5 @@
-import { PlacesClient } from "@google-cloud/places";
+import { PlacesClient } from "@googlemaps/places";
+import type { google } from "@googlemaps/places/build/protos/protos";
 import { writeFileSync } from "fs";
 import { GERMANY_GRID, isInGermany } from "./lib/country-grid";
 import { delay } from "./lib/utils";
@@ -12,20 +13,18 @@ interface SteuerberaterResult {
   location: { lat: number; lng: number };
 }
 
-const placesClient = new PlacesClient({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-});
+const placesClient = new PlacesClient();
 
 const MIN_RATING = 4.5;
 const MIN_REVIEWS = 20;
 
-const isGermanSteuerberater = (place: any) => {
+const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
   const lat = place.location?.latitude;
   const lng = place.location?.longitude;
   if (!lat || !lng || !isInGermany(lat, lng)) return false;
 
   const types = place.types || [];
-  if (!types.includes('accounting')) return false;
+  if (!types.includes("accounting")) return false;
 
   const name = (place.displayName?.text || "").toLowerCase();
   const address = (place.formattedAddress || "").toLowerCase();
@@ -52,7 +51,6 @@ async function searchRegion(lat: number, lng: number) {
 
   try {
     const request = {
-      parent: `projects/${process.env.GOOGLE_CLOUD_PROJECT_ID}/locations/global`,
       locationRestriction: {
         circle: {
           center: {
@@ -62,13 +60,20 @@ async function searchRegion(lat: number, lng: number) {
           radius: 50000,
         },
       },
-      includedTypes: ['accounting'],
-      languageCode: 'de',
+      includedTypes: ["accounting"],
+      languageCode: "de",
       maxResultCount: 20,
-      rankPreference: 'POPULARITY' as const,
     };
 
-    const [response] = await placesClient.searchNearby(request);
+    const [response] = await placesClient.searchNearby(request, {
+      otherArgs: {
+        headers: {
+          "X-Goog-FieldMask":
+            "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.id",
+        },
+      },
+    });
+
     const places = response.places || [];
 
     for (const place of places) {
@@ -80,11 +85,11 @@ async function searchRegion(lat: number, lng: number) {
         isGermanSteuerberater(place)
       ) {
         results.push({
-          name: place.displayName?.text || '',
-          address: place.formattedAddress || '',
+          name: place.displayName?.text || "",
+          address: place.formattedAddress || "",
           rating: place.rating,
           userRatingsTotal: place.userRatingCount,
-          placeId: place.name?.split('/').pop() || '',
+          placeId: place.id || "",
           location: {
             lat: place.location?.latitude || 0,
             lng: place.location?.longitude || 0,
@@ -124,14 +129,18 @@ async function main() {
         arr.findIndex((r) => r.placeId === result.placeId) === index
     );
 
-    uniqueResults.sort((a, b) => b.rating - a.rating || b.userRatingsTotal - a.userRatingsTotal);
+    uniqueResults.sort(
+      (a, b) => b.rating - a.rating || b.userRatingsTotal - a.userRatingsTotal
+    );
 
     writeFileSync(
       "steuerberater_germany.json",
       JSON.stringify(uniqueResults, null, 2)
     );
 
-    console.log(`✅ Found ${uniqueResults.length} unique Steuerberater results`);
+    console.log(
+      `✅ Found ${uniqueResults.length} unique Steuerberater results`
+    );
     console.log(`📄 Results saved to steuerberater_germany.json`);
   } catch (error) {
     console.error("❌ Error:", error);
