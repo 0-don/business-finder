@@ -7,12 +7,16 @@ import {
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema, searchLogSchema } from "./db/schema";
 import { GERMANY_GRID } from "./lib/country-grid";
-import { delay, getSearchState, updateSearchState } from "./lib/utils";
+import {
+  exponentialBackoff,
+  getSearchState,
+  updateSearchState,
+} from "./lib/utils";
 
 const client = new Client({});
 
 async function getPlaceDetails(placeId: string) {
-  try {
+  return exponentialBackoff(async () => {
     const response = await client.placeDetails({
       params: {
         place_id: placeId,
@@ -28,10 +32,10 @@ async function getPlaceDetails(placeId: string) {
       },
     });
     return response.data.result;
-  } catch (error) {
+  }).catch((error) => {
     console.error(`Error fetching details for place ${placeId}:`, error);
     return null;
-  }
+  });
 }
 
 async function searchRegion(
@@ -48,17 +52,19 @@ async function searchRegion(
   do {
     console.log(`  Page ${pageCount + 1}`);
 
-    const response = await client.placesNearby({
-      params: {
-        location: { lat, lng },
-        radius: 50000,
-        type: PlaceType1.accounting,
-        keyword:
-          "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
-        language: Language.de,
-        key: process.env.GOOGLE_MAPS_API_KEY,
-        ...(nextPageToken && { pagetoken: nextPageToken }),
-      },
+    const response = await exponentialBackoff(async () => {
+      return client.placesNearby({
+        params: {
+          location: { lat, lng },
+          radius: 50000,
+          type: PlaceType1.accounting,
+          keyword:
+            "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
+          language: Language.de,
+          key: process.env.GOOGLE_MAPS_API_KEY,
+          ...(nextPageToken && { pagetoken: nextPageToken }),
+        },
+      });
     });
 
     const pageResults = response.data.results.length;
@@ -68,7 +74,6 @@ async function searchRegion(
     for (const place of response.data.results) {
       if (place.place_id && place.name && place.geometry?.location) {
         const details = await getPlaceDetails(place.place_id);
-        await delay(100);
 
         await db
           .insert(businessSchema)
@@ -113,9 +118,6 @@ async function searchRegion(
 
     // Update state after each page
     await updateSearchState(regionIndex, pageCount, nextPageToken);
-
-    if (nextPageToken) await delay(3000);
-    else await delay(1000);
   } while (nextPageToken && pageCount < 3);
 
   // Log completed region
@@ -155,7 +157,6 @@ async function main() {
 
     // Reset page state for next region
     await updateSearchState(i + 1, 0, null);
-    await delay(2000);
   }
 
   console.log("\n🎉 Search completed successfully!");
