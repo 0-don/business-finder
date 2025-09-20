@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --bun --watch src/index.ts"
+    "dev": "bun run --bun --watch src/index.ts",
+    "drizzle": "bun run reset && drizzle-kit generate",
+    "reset": "bun ./drizzle/reset-db.ts"
   },
   "dependencies": {
     "@googlemaps/places": "^2.1.0",

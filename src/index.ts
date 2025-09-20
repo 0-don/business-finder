@@ -1,6 +1,9 @@
+import "@dotenvx/dotenvx/config";
 import { PlacesClient } from "@googlemaps/places";
 import type { google } from "@googlemaps/places/build/protos/protos";
 import { writeFileSync } from "fs";
+import { conflictUpdateAllExcept, db } from "./db";
+import { businessSchema } from "./db/schema";
 import { GERMANY_GRID, isInGermany } from "./lib/country-grid";
 import { delay } from "./lib/utils";
 
@@ -84,7 +87,7 @@ async function searchRegion(lat: number, lng: number) {
         place.userRatingCount >= MIN_REVIEWS &&
         isGermanSteuerberater(place)
       ) {
-        results.push({
+        const result = {
           name: place.displayName?.text || "",
           address: place.formattedAddress || "",
           rating: place.rating,
@@ -94,7 +97,32 @@ async function searchRegion(lat: number, lng: number) {
             lat: place.location?.latitude || 0,
             lng: place.location?.longitude || 0,
           },
-        });
+        };
+
+        results.push(result);
+
+        // Store in database
+        await db
+          .insert(businessSchema)
+          .values({
+            placeId: result.placeId,
+            name: result.name,
+            address: result.address,
+            rating: result.rating.toString(),
+            userRatingsTotal: result.userRatingsTotal,
+            latitude: result.location.lat.toString(),
+            longitude: result.location.lng.toString(),
+            businessType: "steuerberater",
+          })
+          .onConflictDoUpdate({
+            target: businessSchema.placeId,
+            set: conflictUpdateAllExcept(businessSchema, [
+              "id",
+              "placeId",
+              "createdAt",
+            ]),
+          });
+
         await delay(200);
       }
     }
@@ -142,6 +170,7 @@ async function main() {
       `✅ Found ${uniqueResults.length} unique Steuerberater results`
     );
     console.log(`📄 Results saved to steuerberater_germany.json`);
+    console.log(`💾 Data stored in database`);
   } catch (error) {
     console.error("❌ Error:", error);
   }
