@@ -1,13 +1,17 @@
 import "@dotenvx/dotenvx/config";
-import { PlacesClient } from "@googlemaps/places";
+import { PlacesClient, protos } from "@googlemaps/places";
 import type { google } from "@googlemaps/places/build/protos/protos";
-import { writeFileSync } from "fs";
+import { desc, eq } from "drizzle-orm";
 import { conflictUpdateAllExcept, db } from "./db";
-import { businessSchema } from "./db/schema";
+import {
+  businessSchema,
+  searchLogSchema,
+  searchStateSchema,
+} from "./db/schema";
 import { GERMANY_GRID, isInGermany } from "./lib/country-grid";
 import { delay } from "./lib/utils";
 
-interface SteuerberaterResult {
+interface BusinessResult {
   name: string;
   address: string;
   rating: number;
@@ -16,10 +20,10 @@ interface SteuerberaterResult {
   location: { lat: number; lng: number };
 }
 
-const placesClient = new PlacesClient();
-
+const placesClient = new PlacesClient({ libVersion: "" });
 const MIN_RATING = 4.5;
 const MIN_REVIEWS = 20;
+const MAX_RESULTS_PER_REQUEST = 20;
 
 const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
   const lat = place.location?.latitude;
@@ -49,88 +53,177 @@ const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
   );
 };
 
-async function searchRegion(lat: number, lng: number) {
-  const results: SteuerberaterResult[] = [];
+async function searchRegionWithPagination(
+  regionIndex: number,
+  lat: number,
+  lng: number
+) {
+  const results: BusinessResult[] = [];
+  let nextPageToken: string | undefined;
+  let totalPlaces = 0;
+  let pageCount = 0;
 
-  try {
-    const request = {
-      locationRestriction: {
-        circle: {
-          center: {
-            latitude: lat,
-            longitude: lng,
+  console.log(`  Starting paginated search for region ${regionIndex + 1}`);
+
+  do {
+    try {
+      pageCount++;
+      console.log(
+        `    Page ${pageCount}${nextPageToken ? ` (token: ${nextPageToken.substring(0, 20)}...)` : ""}`
+      );
+
+      const request: protos.google.maps.places.v1.ISearchNearbyRequest = {
+        locationRestriction: {
+          circle: {
+            center: { latitude: lat, longitude: lng },
+            radius: 50000,
           },
-          radius: 50000,
         },
-      },
-      includedTypes: ["accounting"],
-      languageCode: "de",
-      maxResultCount: 20,
-    };
+        includedTypes: ["accounting"],
+        languageCode: "de",
+        maxResultCount: MAX_RESULTS_PER_REQUEST,
+      };
 
-    const [response] = await placesClient.searchNearby(request, {
-      otherArgs: {
-        headers: {
-          "X-Goog-FieldMask":
-            "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.id",
-        },
-      },
-    });
-
-    const places = response.places || [];
-
-    for (const place of places) {
-      if (
-        place.rating &&
-        place.userRatingCount &&
-        place.rating >= MIN_RATING &&
-        place.userRatingCount >= MIN_REVIEWS &&
-        isGermanSteuerberater(place)
-      ) {
-        const result = {
-          name: place.displayName?.text || "",
-          address: place.formattedAddress || "",
-          rating: place.rating,
-          userRatingsTotal: place.userRatingCount,
-          placeId: place.id || "",
-          location: {
-            lat: place.location?.latitude || 0,
-            lng: place.location?.longitude || 0,
-          },
-        };
-
-        results.push(result);
-
-        // Store in database
-        await db
-          .insert(businessSchema)
-          .values({
-            placeId: result.placeId,
-            name: result.name,
-            address: result.address,
-            rating: result.rating.toString(),
-            userRatingsTotal: result.userRatingsTotal,
-            latitude: result.location.lat.toString(),
-            longitude: result.location.lng.toString(),
-            businessType: "steuerberater",
-          })
-          .onConflictDoUpdate({
-            target: businessSchema.placeId,
-            set: conflictUpdateAllExcept(businessSchema, [
-              "id",
-              "placeId",
-              "createdAt",
-            ]),
-          });
-
-        await delay(200);
+      if (nextPageToken) {
+        request.pageToken = nextPageToken;
       }
+
+      const [response] = await placesClient.searchNearby(request, {
+        otherArgs: {
+          headers: {
+            "X-Goog-FieldMask":
+              "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.id,nextPageToken",
+          },
+        },
+      });
+
+      const places = response.places || [];
+      totalPlaces += places.length;
+      nextPageToken = response.nextPageToken;
+
+      console.log(`    Found ${places.length} places on page ${pageCount}`);
+
+      for (const place of places) {
+        if (
+          place.rating &&
+          place.userRatingCount &&
+          place.rating >= MIN_RATING &&
+          place.userRatingCount >= MIN_REVIEWS &&
+          isGermanSteuerberater(place)
+        ) {
+          const result = {
+            name: place.displayName?.text || "",
+            address: place.formattedAddress || "",
+            rating: place.rating,
+            userRatingsTotal: place.userRatingCount,
+            placeId: place.id || "",
+            location: {
+              lat: place.location?.latitude || 0,
+              lng: place.location?.longitude || 0,
+            },
+          };
+
+          results.push(result);
+
+          await db
+            .insert(businessSchema)
+            .values({
+              placeId: result.placeId,
+              name: result.name,
+              address: result.address,
+              rating: result.rating.toString(),
+              userRatingsTotal: result.userRatingsTotal,
+              latitude: result.location.lat.toString(),
+              longitude: result.location.lng.toString(),
+              businessType: "steuerberater",
+            })
+            .onConflictDoUpdate({
+              target: businessSchema.placeId,
+              set: conflictUpdateAllExcept(businessSchema, [
+                "id",
+                "placeId",
+                "createdAt",
+              ]),
+            });
+        }
+      }
+
+      await delay(nextPageToken ? 2000 : 1000); // Longer delay between pages
+    } catch (error) {
+      console.error(`    Error on page ${pageCount}:`, error);
+
+      await db.insert(searchLogSchema).values({
+        regionIndex,
+        latitude: lat.toString(),
+        longitude: lng.toString(),
+        resultsFound: results.length,
+        totalPlaces,
+        nextPageToken,
+        hasMorePages: !!nextPageToken,
+        status: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+
+      break;
     }
-  } catch (error) {
-    console.error(`Error in region (${lat}, ${lng}):`, error);
+  } while (nextPageToken);
+
+  // Log successful completion
+  await db.insert(searchLogSchema).values({
+    regionIndex,
+    latitude: lat.toString(),
+    longitude: lng.toString(),
+    resultsFound: results.length,
+    totalPlaces,
+    hasMorePages: false,
+    status: "completed",
+  });
+
+  console.log(
+    `  Completed region ${regionIndex + 1}: ${results.length} qualifying results from ${totalPlaces} total places across ${pageCount} pages`
+  );
+  return results;
+}
+
+async function initializeOrResumeSearch() {
+  const existingState = await db
+    .select()
+    .from(searchStateSchema)
+    .where(eq(searchStateSchema.isComplete, false))
+    .orderBy(desc(searchStateSchema.updatedAt))
+    .limit(1);
+
+  if (existingState.length > 0) {
+    console.log(
+      `📋 Resuming previous search from region ${existingState[0]!.currentRegionIndex + 1}/${existingState[0]!.totalRegions}`
+    );
+    return existingState[0];
   }
 
-  return results;
+  console.log(`🆕 Starting new search across ${GERMANY_GRID.length} regions`);
+  const [newState] = await db
+    .insert(searchStateSchema)
+    .values({
+      currentRegionIndex: 0,
+      totalRegions: GERMANY_GRID.length,
+    })
+    .returning();
+
+  return newState;
+}
+async function updateSearchProgress(
+  stateId: number,
+  regionIndex: number,
+  isComplete = false
+) {
+  await db
+    .update(searchStateSchema)
+    .set({
+      currentRegionIndex: regionIndex,
+      isComplete,
+      completedAt: isComplete ? new Date() : undefined,
+    })
+    .where(eq(searchStateSchema.id, stateId));
 }
 
 async function main() {
@@ -138,39 +231,26 @@ async function main() {
     console.log(
       `🔍 Searching for Steuerberater (Rating ≥${MIN_RATING}, Reviews ≥${MIN_REVIEWS})...`
     );
-    console.log(`Starting search across ${GERMANY_GRID.length} regions...`);
-    const allResults: SteuerberaterResult[] = [];
 
-    for (let i = 0; i < GERMANY_GRID.length; i++) {
+    const searchState = (await initializeOrResumeSearch())!;
+    const allResults: BusinessResult[] = [];
+
+    for (let i = searchState.currentRegionIndex; i < GERMANY_GRID.length; i++) {
       const { lat, lng } = GERMANY_GRID[i]!;
-      console.log(`Region ${i + 1}/${GERMANY_GRID.length}: ${lat}, ${lng}`);
+      console.log(
+        `🌍 Region ${i + 1}/${GERMANY_GRID.length}: (${lat}, ${lng})`
+      );
 
-      const regionResults = await searchRegion(lat, lng);
+      const regionResults = await searchRegionWithPagination(i, lat, lng);
       allResults.push(...regionResults);
-      console.log(`Found ${regionResults.length} results`);
+
+      await updateSearchProgress(searchState.id, i + 1);
       await delay(1500);
     }
 
-    // Remove duplicates and sort
-    const uniqueResults = allResults.filter(
-      (result, index, arr) =>
-        arr.findIndex((r) => r.placeId === result.placeId) === index
-    );
+    await updateSearchProgress(searchState.id, GERMANY_GRID.length, true);
 
-    uniqueResults.sort(
-      (a, b) => b.rating - a.rating || b.userRatingsTotal - a.userRatingsTotal
-    );
-
-    writeFileSync(
-      "steuerberater_germany.json",
-      JSON.stringify(uniqueResults, null, 2)
-    );
-
-    console.log(
-      `✅ Found ${uniqueResults.length} unique Steuerberater results`
-    );
-    console.log(`📄 Results saved to steuerberater_germany.json`);
-    console.log(`💾 Data stored in database`);
+    console.log(`\n✅ Search Complete!`);
   } catch (error) {
     console.error("❌ Error:", error);
   }
