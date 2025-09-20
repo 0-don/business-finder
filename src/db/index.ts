@@ -27,6 +27,6 @@ export function conflictUpdateAllExcept<
   );
 }
 
-migrate(db, { migrationsFolder: resolve("drizzle") })
+await migrate(db, { migrationsFolder: resolve("drizzle") })
   .then(() => log("Database migrated successfully"))
   .catch(() => process.exit(1));

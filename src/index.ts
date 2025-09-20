@@ -1,6 +1,4 @@
-// src/index.ts
 import "@dotenvx/dotenvx/config";
-import type { google } from "@googlemaps/places/build/protos/protos";
 import { desc, eq } from "drizzle-orm";
 import { conflictUpdateAllExcept, db } from "./db";
 import {
@@ -20,39 +18,40 @@ interface BusinessResult {
   location: { lat: number; lng: number };
 }
 
-interface TextSearchRequest {
-  textQuery: string;
-  pageSize?: number;
-  languageCode?: string;
-  includedType?: string;
-  locationBias?: {
-    circle: {
-      center: { latitude: number; longitude: number };
-      radius: number;
+interface LegacyNearbySearchResponse {
+  error_message: string;
+  results: Array<{
+    place_id: string;
+    name: string;
+    formatted_address: string;
+    rating?: number;
+    user_ratings_total?: number;
+    geometry: {
+      location: {
+        lat: number;
+        lng: number;
+      };
     };
-  };
-  pageToken?: string;
-}
-
-interface TextSearchResponse {
-  places?: google.maps.places.v1.IPlace[];
-  nextPageToken?: string;
+    types: string[];
+  }>;
+  next_page_token?: string;
+  status: string;
 }
 
 const MIN_RATING = 4.5;
 const MIN_REVIEWS = 20;
-const MAX_RESULTS_PER_REQUEST = 20;
+const RADIUS = 50000; // 50km max for legacy API
 
-const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
-  const lat = place.location?.latitude;
-  const lng = place.location?.longitude;
+const isGermanSteuerberater = (place: any) => {
+  const lat = place.geometry?.location?.lat;
+  const lng = place.geometry?.location?.lng;
   if (!lat || !lng || !isInGermany(lat, lng)) return false;
 
   const types = place.types || [];
   if (!types.includes("accounting")) return false;
 
-  const name = (place.displayName?.text || "").toLowerCase();
-  const address = (place.formattedAddress || "").toLowerCase();
+  const name = (place.name || "").toLowerCase();
+  const address = (place.formatted_address || "").toLowerCase();
   const germanTerms = [
     "steuer",
     "tax",
@@ -71,38 +70,29 @@ const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
   );
 };
 
-async function callTextSearchAPI(
-  textQuery: string,
-  locationBias?: TextSearchRequest["locationBias"],
+async function callLegacyNearbySearchAPI(
+  lat: number,
+  lng: number,
   pageToken?: string
-): Promise<TextSearchResponse> {
-  const url = "https://places.googleapis.com/v1/places:searchText";
+): Promise<LegacyNearbySearchResponse> {
+  const baseUrl =
+    "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
 
-  const requestBody: TextSearchRequest = {
-    textQuery,
-    pageSize: MAX_RESULTS_PER_REQUEST,
-    languageCode: "de",
-    includedType: "accounting",
-  };
-
-  if (locationBias) {
-    requestBody.locationBias = locationBias;
-  }
+  const params = new URLSearchParams({
+    location: `${lat},${lng}`,
+    radius: RADIUS.toString(),
+    type: "accounting",
+    language: "de",
+    key: process.env.GOOGLE_MAPS_API_KEY,
+  });
 
   if (pageToken) {
-    requestBody.pageToken = pageToken;
+    params.append("pagetoken", pageToken);
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY!,
-      "X-Goog-FieldMask":
-        "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.id,nextPageToken",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const url = `${baseUrl}?${params.toString()}`;
+
+  const response = await fetch(url);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -111,7 +101,15 @@ async function callTextSearchAPI(
     );
   }
 
-  return response.json() as Promise<TextSearchResponse>;
+  const data = (await response.json()) as LegacyNearbySearchResponse;
+
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    throw new Error(
+      `API error: ${data.status} - ${data.error_message || "Unknown error"}`
+    );
+  }
+
+  return data;
 }
 
 async function searchRegionWithPagination(
@@ -133,44 +131,31 @@ async function searchRegionWithPagination(
         `    Page ${pageCount}${nextPageToken ? ` (token: ${nextPageToken.substring(0, 20)}...)` : ""}`
       );
 
-      const textQuery = `Steuerberater accounting near ${lat},${lng}`;
+      const response = await callLegacyNearbySearchAPI(lat, lng, nextPageToken);
 
-      const locationBias = {
-        circle: {
-          center: { latitude: lat, longitude: lng },
-          radius: 50000,
-        },
-      };
-
-      const response = await callTextSearchAPI(
-        textQuery,
-        locationBias,
-        nextPageToken
-      );
-
-      const places = response.places || [];
+      const places = response.results || [];
       totalPlaces += places.length;
-      nextPageToken = response.nextPageToken;
+      nextPageToken = response.next_page_token;
 
       console.log(`    Found ${places.length} places on page ${pageCount}`);
 
       for (const place of places) {
         if (
           place.rating &&
-          place.userRatingCount &&
+          place.user_ratings_total &&
           place.rating >= MIN_RATING &&
-          place.userRatingCount >= MIN_REVIEWS &&
+          place.user_ratings_total >= MIN_REVIEWS &&
           isGermanSteuerberater(place)
         ) {
           const result: BusinessResult = {
-            name: place.displayName?.text || "",
-            address: place.formattedAddress || "",
+            name: place.name || "",
+            address: place.formatted_address || "",
             rating: place.rating,
-            userRatingsTotal: place.userRatingCount,
-            placeId: place.id || "",
+            userRatingsTotal: place.user_ratings_total,
+            placeId: place.place_id || "",
             location: {
-              lat: place.location?.latitude || 0,
-              lng: place.location?.longitude || 0,
+              lat: place.geometry?.location?.lat || 0,
+              lng: place.geometry?.location?.lng || 0,
             },
           };
 
@@ -199,6 +184,7 @@ async function searchRegionWithPagination(
         }
       }
 
+      // Legacy API requires 2-3 seconds delay for page tokens to become valid
       if (nextPageToken) {
         await delay(3000);
       } else {
@@ -221,7 +207,7 @@ async function searchRegionWithPagination(
 
       break;
     }
-  } while (nextPageToken && pageCount < 5);
+  } while (nextPageToken && pageCount < 3); // Legacy API typically has max 3 pages (60 results)
 
   await db.insert(searchLogSchema).values({
     regionIndex,

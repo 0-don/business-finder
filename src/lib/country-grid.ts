@@ -1,5 +1,35 @@
+import type { google } from "@googlemaps/places/build/protos/protos";
+
 export const isInGermany = (lat: number, lng: number) =>
   lat >= 47.27 && lat <= 55.05 && lng >= 5.87 && lng <= 15.04;
+
+export const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
+  const lat = place.location?.latitude;
+  const lng = place.location?.longitude;
+  if (!lat || !lng || !isInGermany(lat, lng)) return false;
+
+  const types = place.types || [];
+  if (!types.includes("accounting")) return false;
+
+  const name = (place.displayName?.text || "").toLowerCase();
+  const address = (place.formattedAddress || "").toLowerCase();
+  const germanTerms = [
+    "steuer",
+    "tax",
+    "accounting",
+    "wirtschaftsprüfung",
+    "buchhaltung",
+    "beratung",
+    "kanzlei",
+  ];
+
+  return (
+    germanTerms.some((term) => name.includes(term) || address.includes(term)) ||
+    address.includes("deutschland") ||
+    address.includes("germany") ||
+    /\b\d{5}\b/.test(address)
+  );
+};
 
 // Precise Germany coverage grid based on exact coordinates
 export const GERMANY_GRID = [
