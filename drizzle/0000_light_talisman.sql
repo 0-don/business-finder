@@ -33,21 +33,14 @@ CREATE TABLE "search_log" (
 	"latitude" numeric(10, 8) NOT NULL,
 	"longitude" numeric(11, 8) NOT NULL,
 	"results_found" integer NOT NULL,
-	"total_places" integer NOT NULL,
-	"next_page_token" text,
-	"has_more_pages" boolean DEFAULT false NOT NULL,
-	"status" text NOT NULL,
-	"error_message" text,
 	"searched_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE "search_state" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"current_region_index" integer DEFAULT 0 NOT NULL,
-	"total_regions" integer NOT NULL,
-	"is_complete" boolean DEFAULT false NOT NULL,
-	"started_at" timestamp DEFAULT now(),
-	"completed_at" timestamp,
+	"region_index" integer DEFAULT 0 NOT NULL,
+	"page_index" integer DEFAULT 0 NOT NULL,
+	"next_page_token" text,
 	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint

@@ -1,5 +1,5 @@
 {
-  "id": "1025ab56-1945-4608-83de-b4beb3744481",
+  "id": "f8a1d203-270e-45ef-82f5-7d600a5b2129",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -249,37 +249,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "total_places": {
-          "name": "total_places",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "next_page_token": {
-          "name": "next_page_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "has_more_pages": {
-          "name": "has_more_pages",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "error_message": {
-          "name": "error_message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "searched_at": {
           "name": "searched_at",
           "type": "timestamp",
@@ -306,36 +275,23 @@
           "primaryKey": true,
           "notNull": true
         },
-        "current_region_index": {
-          "name": "current_region_index",
+        "region_index": {
+          "name": "region_index",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "default": 0
         },
-        "total_regions": {
-          "name": "total_regions",
+        "page_index": {
+          "name": "page_index",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
-        },
-        "is_complete": {
-          "name": "is_complete",
-          "type": "boolean",
-          "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": 0
         },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp",
+        "next_page_token": {
+          "name": "next_page_token",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
