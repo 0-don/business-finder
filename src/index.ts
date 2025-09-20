@@ -4,11 +4,10 @@ import {
   Language,
   PlaceType1,
 } from "@googlemaps/google-maps-services-js";
-import { writeFileSync } from "fs";
 import { conflictUpdateAllExcept, db } from "./db";
-import { businessSchema } from "./db/schema";
+import { businessSchema, searchLogSchema } from "./db/schema";
 import { GERMANY_GRID } from "./lib/country-grid";
-import { delay } from "./lib/utils";
+import { delay, getSearchState, updateSearchState } from "./lib/utils";
 
 const client = new Client({});
 
@@ -21,14 +20,13 @@ async function getPlaceDetails(placeId: string) {
           "website",
           "formatted_phone_number",
           "international_phone_number",
-          "opening_hours", // More detailed than nearby search
+          "opening_hours",
           "utc_offset",
         ],
         language: Language.de,
         key: process.env.GOOGLE_MAPS_API_KEY,
       },
     });
-
     return response.data.result;
   } catch (error) {
     console.error(`Error fetching details for place ${placeId}:`, error);
@@ -36,11 +34,20 @@ async function getPlaceDetails(placeId: string) {
   }
 }
 
-async function searchRegion(lat: number, lng: number) {
-  let nextPageToken: string | undefined;
-  let pageCount = 0;
+async function searchRegion(
+  lat: number,
+  lng: number,
+  regionIndex: number,
+  startPageIndex = 0,
+  startPageToken?: string | null
+) {
+  let totalResults = 0;
+  let nextPageToken: string | undefined = startPageToken || undefined;
+  let pageCount = startPageIndex;
 
   do {
+    console.log(`  Page ${pageCount + 1}`);
+
     const response = await client.placesNearby({
       params: {
         location: { lat, lng },
@@ -54,22 +61,14 @@ async function searchRegion(lat: number, lng: number) {
       },
     });
 
-    pageCount++;
+    const pageResults = response.data.results.length;
+    totalResults += pageResults;
+    console.log(`    ${pageResults} results`);
 
     for (const place of response.data.results) {
       if (place.place_id && place.name && place.geometry?.location) {
-        console.log(`Fetching details for: ${place.name}`);
-
-        // Get detailed information (only fields not in nearby search)
         const details = await getPlaceDetails(place.place_id);
-
-        // Write place details response
-        writeFileSync(
-          `debug_details_${place.place_id}.json`,
-          JSON.stringify(details, null, 2)
-        );
-
-        await delay(100); // Rate limiting for Place Details API
+        await delay(100);
 
         await db
           .insert(businessSchema)
@@ -85,14 +84,13 @@ async function searchRegion(lat: number, lng: number) {
             longitude: place.geometry.location.lng.toString(),
             businessStatus: place.business_status || null,
             types: place.types || null,
-            openingHours: details?.opening_hours || place.opening_hours || null, // Use detailed version if available
+            openingHours: details?.opening_hours || place.opening_hours || null,
             photos: place.photos || null,
             plusCode: place.plus_code || null,
             icon: place.icon || null,
             iconBackgroundColor: place.icon_background_color || null,
             iconMaskBaseUri: place.icon_mask_base_uri || null,
             priceLevel: place.price_level || null,
-            // Only these come from Place Details:
             website: details?.website || null,
             phoneNumber: details?.formatted_phone_number || null,
             internationalPhoneNumber:
@@ -111,19 +109,56 @@ async function searchRegion(lat: number, lng: number) {
     }
 
     nextPageToken = response.data.next_page_token;
+    pageCount++;
+
+    // Update state after each page
+    await updateSearchState(regionIndex, pageCount, nextPageToken);
+
     if (nextPageToken) await delay(3000);
     else await delay(1000);
   } while (nextPageToken && pageCount < 3);
+
+  // Log completed region
+  await db.insert(searchLogSchema).values({
+    regionIndex,
+    latitude: lat.toString(),
+    longitude: lng.toString(),
+    resultsFound: totalResults,
+  });
+
+  console.log(`  ✓ Region completed: ${totalResults} total results`);
 }
 
 async function main() {
-  for (let i = 0; i < GERMANY_GRID.length; i++) {
+  console.log("Starting business search...");
+
+  const state = await getSearchState();
+  console.log(
+    `Resuming from region ${state.regionIndex + 1}/${GERMANY_GRID.length}, page ${state.pageIndex + 1}`
+  );
+
+  for (let i = state.regionIndex; i < GERMANY_GRID.length; i++) {
     const { lat, lng } = GERMANY_GRID[i]!;
-    console.log(`Region ${i + 1}/${GERMANY_GRID.length}: (${lat}, ${lng})`);
-    await searchRegion(lat, lng);
+    console.log(`\nRegion ${i + 1}/${GERMANY_GRID.length}: (${lat}, ${lng})`);
+
+    const startPageIndex = i === state.regionIndex ? state.pageIndex : 0;
+    const startPageToken =
+      i === state.regionIndex ? state.nextPageToken : undefined;
+
+    await searchRegion(
+      lat,
+      lng,
+      i,
+      startPageIndex,
+      startPageToken || undefined
+    );
+
+    // Reset page state for next region
+    await updateSearchState(i + 1, 0, null);
     await delay(2000);
   }
-  console.log("Complete!");
+
+  console.log("\n🎉 Search completed successfully!");
 }
 
-main();
+main().catch(console.error);
