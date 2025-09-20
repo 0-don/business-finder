@@ -1,5 +1,5 @@
+// src/index.ts
 import "@dotenvx/dotenvx/config";
-import { PlacesClient, protos } from "@googlemaps/places";
 import type { google } from "@googlemaps/places/build/protos/protos";
 import { desc, eq } from "drizzle-orm";
 import { conflictUpdateAllExcept, db } from "./db";
@@ -20,7 +20,25 @@ interface BusinessResult {
   location: { lat: number; lng: number };
 }
 
-const placesClient = new PlacesClient({ libVersion: "" });
+interface TextSearchRequest {
+  textQuery: string;
+  pageSize?: number;
+  languageCode?: string;
+  includedType?: string;
+  locationBias?: {
+    circle: {
+      center: { latitude: number; longitude: number };
+      radius: number;
+    };
+  };
+  pageToken?: string;
+}
+
+interface TextSearchResponse {
+  places?: google.maps.places.v1.IPlace[];
+  nextPageToken?: string;
+}
+
 const MIN_RATING = 4.5;
 const MIN_REVIEWS = 20;
 const MAX_RESULTS_PER_REQUEST = 20;
@@ -53,6 +71,49 @@ const isGermanSteuerberater = (place: google.maps.places.v1.IPlace) => {
   );
 };
 
+async function callTextSearchAPI(
+  textQuery: string,
+  locationBias?: TextSearchRequest["locationBias"],
+  pageToken?: string
+): Promise<TextSearchResponse> {
+  const url = "https://places.googleapis.com/v1/places:searchText";
+
+  const requestBody: TextSearchRequest = {
+    textQuery,
+    pageSize: MAX_RESULTS_PER_REQUEST,
+    languageCode: "de",
+    includedType: "accounting",
+  };
+
+  if (locationBias) {
+    requestBody.locationBias = locationBias;
+  }
+
+  if (pageToken) {
+    requestBody.pageToken = pageToken;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY!,
+      "X-Goog-FieldMask":
+        "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.id,nextPageToken",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `API request failed: ${response.status} ${response.statusText} - ${errorText}`
+    );
+  }
+
+  return response.json() as Promise<TextSearchResponse>;
+}
+
 async function searchRegionWithPagination(
   regionIndex: number,
   lat: number,
@@ -72,30 +133,20 @@ async function searchRegionWithPagination(
         `    Page ${pageCount}${nextPageToken ? ` (token: ${nextPageToken.substring(0, 20)}...)` : ""}`
       );
 
-      const request: protos.google.maps.places.v1.ISearchNearbyRequest = {
-        locationRestriction: {
-          circle: {
-            center: { latitude: lat, longitude: lng },
-            radius: 50000,
-          },
+      const textQuery = `Steuerberater accounting near ${lat},${lng}`;
+
+      const locationBias = {
+        circle: {
+          center: { latitude: lat, longitude: lng },
+          radius: 50000,
         },
-        includedTypes: ["accounting"],
-        languageCode: "de",
-        maxResultCount: MAX_RESULTS_PER_REQUEST,
       };
 
-      if (nextPageToken) {
-        request.pageToken = nextPageToken;
-      }
-
-      const [response] = await placesClient.searchNearby(request, {
-        otherArgs: {
-          headers: {
-            "X-Goog-FieldMask":
-              "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.id,nextPageToken",
-          },
-        },
-      });
+      const response = await callTextSearchAPI(
+        textQuery,
+        locationBias,
+        nextPageToken
+      );
 
       const places = response.places || [];
       totalPlaces += places.length;
@@ -111,7 +162,7 @@ async function searchRegionWithPagination(
           place.userRatingCount >= MIN_REVIEWS &&
           isGermanSteuerberater(place)
         ) {
-          const result = {
+          const result: BusinessResult = {
             name: place.displayName?.text || "",
             address: place.formattedAddress || "",
             rating: place.rating,
@@ -148,7 +199,11 @@ async function searchRegionWithPagination(
         }
       }
 
-      await delay(nextPageToken ? 2000 : 1000); // Longer delay between pages
+      if (nextPageToken) {
+        await delay(3000);
+      } else {
+        await delay(1000);
+      }
     } catch (error) {
       console.error(`    Error on page ${pageCount}:`, error);
 
@@ -166,9 +221,8 @@ async function searchRegionWithPagination(
 
       break;
     }
-  } while (nextPageToken);
+  } while (nextPageToken && pageCount < 5);
 
-  // Log successful completion
   await db.insert(searchLogSchema).values({
     regionIndex,
     latitude: lat.toString(),
@@ -211,6 +265,7 @@ async function initializeOrResumeSearch() {
 
   return newState;
 }
+
 async function updateSearchProgress(
   stateId: number,
   regionIndex: number,
@@ -245,12 +300,13 @@ async function main() {
       allResults.push(...regionResults);
 
       await updateSearchProgress(searchState.id, i + 1);
-      await delay(1500);
+      await delay(2000);
     }
 
     await updateSearchProgress(searchState.id, GERMANY_GRID.length, true);
 
     console.log(`\n✅ Search Complete!`);
+    console.log(`📊 Total results found: ${allResults.length}`);
   } catch (error) {
     console.error("❌ Error:", error);
   }
