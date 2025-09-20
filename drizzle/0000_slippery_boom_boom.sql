@@ -7,7 +7,6 @@ CREATE TABLE "business" (
 	"user_ratings_total" integer NOT NULL,
 	"latitude" numeric(10, 8) NOT NULL,
 	"longitude" numeric(11, 8) NOT NULL,
-	"business_type" text NOT NULL,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now(),
 	CONSTRAINT "business_place_id_unique" UNIQUE("place_id")

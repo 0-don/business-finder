@@ -1,5 +1,5 @@
 {
-  "id": "bae06bef-2329-4e4b-9696-e623b3542249",
+  "id": "5382d43a-bdca-4ad0-a9d5-faf68d48d7ec",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -53,12 +53,6 @@
         "longitude": {
           "name": "longitude",
           "type": "numeric(11, 8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "business_type": {
-          "name": "business_type",
-          "type": "text",
           "primaryKey": false,
           "notNull": true
         },

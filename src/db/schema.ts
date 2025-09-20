@@ -20,7 +20,6 @@ export const businessSchema = pgTable(
     userRatingsTotal: integer("user_ratings_total").notNull(),
     latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
     longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
-    businessType: text("business_type").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

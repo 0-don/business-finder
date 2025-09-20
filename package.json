@@ -9,6 +9,7 @@
     "reset": "bun ./drizzle/reset-db.ts"
   },
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.2",
     "@googlemaps/places": "^2.1.0",
     "drizzle-orm": "^0.44.4"
   },
