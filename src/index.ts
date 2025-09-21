@@ -1,16 +1,14 @@
 import "@dotenvx/dotenvx/config";
-import { Language, PlaceType1 } from "@googlemaps/google-maps-services-js";
 import { conflictUpdateAllExcept, db } from "./db";
-import { businessSchema, searchLogSchema } from "./db/schema";
+import { businessSchema } from "./db/schema";
 import {
-  CLIENT,
   GRID_MANAGER,
   MAX_PAGES_PER_CELL,
   MAX_RESULTS_PER_CELL,
   RESULTS_PER_PAGE,
 } from "./lib/constants";
 import type { GridCell } from "./lib/turf-grid";
-import { exponentialBackoff } from "./lib/utils";
+import { getPlacesNearby } from "./client";
 
 async function searchGridCell(gridCell: GridCell): Promise<number> {
   const { cellId, lat, lng, radius, level, admin1 } = gridCell;
@@ -30,20 +28,7 @@ async function searchGridCell(gridCell: GridCell): Promise<number> {
   while (currentPage < MAX_PAGES_PER_CELL) {
     console.log(`  Page ${currentPage + 1}/${MAX_PAGES_PER_CELL}`);
 
-    const response = await exponentialBackoff(async () => {
-      return CLIENT.placesNearby({
-        params: {
-          location: { lat, lng },
-          radius,
-          type: PlaceType1.accounting,
-          keyword:
-            "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
-          language: Language.de,
-          key: process.env.GOOGLE_MAPS_API_KEY!,
-          ...(nextPageToken && { pagetoken: nextPageToken }),
-        },
-      });
-    });
+    const response = await getPlacesNearby(lat, lng, radius, nextPageToken);
 
     const pageResults = response.data.results.length;
     totalResults += pageResults;
@@ -88,16 +73,6 @@ async function searchGridCell(gridCell: GridCell): Promise<number> {
           });
       }
     }
-
-    // Log search
-    await db.insert(searchLogSchema).values({
-      cellId,
-      latitude: lat.toString(),
-      longitude: lng.toString(),
-      radius,
-      resultsFound: pageResults,
-      pageNumber: currentPage + 1,
-    });
 
     nextPageToken = response.data.next_page_token;
     currentPage++;

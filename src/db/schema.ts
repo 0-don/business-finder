@@ -51,11 +51,11 @@ export const gridCellSchema = pgTable(
   "grid_cell",
   {
     id: serial("id").primaryKey(),
-    cellId: text("cell_id").notNull().unique(), // Custom cell identifier
+    cellId: text("cell_id").notNull().unique(),
     latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
     longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
-    radius: integer("radius").notNull(), // Search radius in meters
-    level: integer("level").notNull(), // Grid subdivision level
+    radius: integer("radius").notNull(),
+    level: integer("level").notNull(),
     isProcessed: boolean("is_processed").default(false),
     isExhausted: boolean("is_exhausted").default(false),
     currentPage: integer("current_page").default(0),
@@ -68,24 +68,3 @@ export const gridCellSchema = pgTable(
   },
   (table) => [uniqueIndex("idx_cell_id").on(table.cellId)]
 );
-
-export const searchLogSchema = pgTable("search_log", {
-  id: serial("id").primaryKey(),
-  cellId: text("cell_id").notNull(),
-  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
-  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
-  radius: integer("radius").notNull(),
-  resultsFound: integer("results_found").notNull(),
-  pageNumber: integer("page_number").notNull(),
-  searchedAt: timestamp("searched_at").defaultNow(),
-});
-
-export const searchStateSchema = pgTable("search_state", {
-  id: serial("id").primaryKey(),
-  regionIndex: integer("region_index").notNull().default(0),
-  pageIndex: integer("page_index").notNull().default(0),
-  nextPageToken: text("next_page_token"),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});

@@ -1,4 +1,4 @@
-import { Language } from "@googlemaps/google-maps-services-js";
+import { Language, PlaceType1 } from "@googlemaps/google-maps-services-js";
 import { CLIENT } from "./lib/constants";
 import { exponentialBackoff } from "./lib/utils";
 
@@ -22,5 +22,27 @@ export async function getPlaceDetails(placeId: string) {
   }).catch((error) => {
     console.error(`Error fetching details for place ${placeId}:`, error);
     return null;
+  });
+}
+
+export async function getPlacesNearby(
+  lat: number,
+  lng: number,
+  radius: number,
+  nextPageToken?: string | null
+) {
+  return await exponentialBackoff(async () => {
+    return CLIENT.placesNearby({
+      params: {
+        location: { lat, lng },
+        radius,
+        type: PlaceType1.accounting,
+        keyword:
+          "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
+        language: Language.de,
+        key: process.env.GOOGLE_MAPS_API_KEY!,
+        ...(nextPageToken && { pagetoken: nextPageToken }),
+      },
+    });
   });
 }
