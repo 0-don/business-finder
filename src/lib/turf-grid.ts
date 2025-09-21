@@ -177,28 +177,6 @@ export class TurfGridManager {
     const lat = parseFloat(cell.latitude);
     const lng = parseFloat(cell.longitude);
 
-    // Get nearby places for context using Drizzle
-    const nearbyPlaces = await naturalEarthDb
-      .select({
-        name: ne10MPopulatedPlaces.name,
-        featurecla: ne10MPopulatedPlaces.featurecla,
-        popMax: ne10MPopulatedPlaces.popMax,
-      })
-      .from(ne10MPopulatedPlaces)
-      .where(
-        and(
-          eq(ne10MPopulatedPlaces.isoA2, "DE"),
-          sql`${ne10MPopulatedPlaces.latitude} BETWEEN ${lat - 0.2} AND ${
-            lat + 0.2
-          }`,
-          sql`${ne10MPopulatedPlaces.longitude} BETWEEN ${lng - 0.2} AND ${
-            lng + 0.2
-          }`
-        )
-      )
-      .orderBy(sql`${ne10MPopulatedPlaces.popMax} DESC`)
-      .limit(1);
-
     return {
       cellId: cell.cellId,
       lat,
