@@ -1,19 +1,24 @@
 import { createReadStream, createWriteStream, existsSync } from "fs";
-import { rename, rm } from "fs/promises";
+import { copyFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 
+const NATURAL_EARTH_VECTOR = "natural_earth_vector";
+
 export async function setupNaturalEarth() {
-  const dbPath = "./natural_earth_vector.sqlite";
+  const dbPath = `./${NATURAL_EARTH_VECTOR}.sqlite`;
 
   if (existsSync(dbPath)) {
     console.log("Natural Earth database already exists");
     return;
   }
 
-  const url =
-    "https://naciscdn.org/naturalearth/packages/natural_earth_vector.sqlite.zip";
-  const zipPath = "./natural_earth_vector.sqlite.zip";
+  const url = `https://naciscdn.org/naturalearth/packages/${NATURAL_EARTH_VECTOR}.sqlite.zip`;
+
+  const tempDir = tmpdir();
+  const zipPath = join(tempDir, `${NATURAL_EARTH_VECTOR}.sqlite.zip`);
 
   console.log("Downloading Natural Earth data...");
 
@@ -28,18 +33,19 @@ export async function setupNaturalEarth() {
   console.log("Extracting database...");
 
   const readStream = createReadStream(zipPath);
-  await pipeline(readStream, Extract({ path: "." }));
+  await pipeline(readStream, Extract({ path: tempDir }));
 
-  const extractedPath = "./packages/natural_earth_vector.sqlite";
+  const extractedPath = join(
+    tempDir,
+    "packages",
+    `${NATURAL_EARTH_VECTOR}.sqlite`
+  );
   if (existsSync(extractedPath)) {
-    await rename(extractedPath, dbPath);
+    await copyFile(extractedPath, dbPath);
     console.log("Natural Earth database ready!");
   } else {
     throw new Error("Extracted SQLite file not found in packages/");
   }
-
-  await rm(zipPath, { force: true });
-  await rm("packages", { recursive: true, force: true });
 }
 
 if (import.meta.main) {
