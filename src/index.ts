@@ -1,47 +1,16 @@
 import "@dotenvx/dotenvx/config";
-import {
-  Client,
-  Language,
-  PlaceType1,
-} from "@googlemaps/google-maps-services-js";
+import { Language, PlaceType1 } from "@googlemaps/google-maps-services-js";
 import { latLngToCell } from "h3-js";
+import { getPlaceDetails } from "./client";
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema, searchLogSchema } from "./db/schema";
-import {
-  NaturalEarthGridManager,
-  type NaturalEarthGridCell,
-} from "./lib/natural-earth-grid";
+import { CLIENT, GRID_MANAGER } from "./lib/constants";
+import { type NaturalEarthGridCell } from "./lib/natural-earth-grid";
 import { exponentialBackoff } from "./lib/utils";
-
-const client = new Client();
-const gridManager = new NaturalEarthGridManager();
 
 const MAX_PAGES_PER_CELL = 3;
 const RESULTS_PER_PAGE = 20;
 const MAX_RESULTS_PER_CELL = 60; // 20 results × 3 pages - subdivision threshold
-
-async function getPlaceDetails(placeId: string) {
-  return exponentialBackoff(async () => {
-    const response = await client.placeDetails({
-      params: {
-        place_id: placeId,
-        fields: [
-          "website",
-          "formatted_phone_number",
-          "international_phone_number",
-          "opening_hours",
-          "utc_offset",
-        ],
-        language: Language.de,
-        key: process.env.GOOGLE_MAPS_API_KEY!,
-      },
-    });
-    return response.data.result;
-  }).catch((error) => {
-    console.error(`Error fetching details for place ${placeId}:`, error);
-    return null;
-  });
-}
 
 async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
   const { h3Index, lat, lng, radius, resolution, admin1 } = gridCell;
@@ -54,7 +23,7 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
   }
 
   // Get current progress
-  const progress = await gridManager.getCellProgress(h3Index);
+  const progress = await GRID_MANAGER.getCellProgress(h3Index);
   let currentPage = progress?.currentPage || 0;
   let nextPageToken = progress?.nextPageToken;
   let totalResults = progress?.totalResults || 0;
@@ -64,7 +33,7 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
     console.log(`  Page ${currentPage + 1}/${MAX_PAGES_PER_CELL}`);
 
     const response = await exponentialBackoff(async () => {
-      return client.placesNearby({
+      return CLIENT.placesNearby({
         params: {
           location: { lat, lng },
           radius,
@@ -145,7 +114,7 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
     currentPage++;
 
     // Update progress
-    await gridManager.updateCellProgress(
+    await GRID_MANAGER.updateCellProgress(
       h3Index,
       currentPage,
       nextPageToken,
@@ -171,10 +140,10 @@ async function main() {
 
   try {
     // Initialize grid if needed
-    const stats = await gridManager.getGridStats();
+    const stats = await GRID_MANAGER.getGridStats();
     if (stats.length === 0) {
       console.log("No grid found, initializing from Natural Earth data...");
-      await gridManager.initializeGermanyGrid();
+      await GRID_MANAGER.initializeGermanyGrid();
     }
 
     // Show current stats
@@ -188,7 +157,7 @@ async function main() {
     // Process cells one by one
     let processedCount = 0;
     while (true) {
-      const nextCell = await gridManager.getNextUnprocessedCell();
+      const nextCell = await GRID_MANAGER.getNextUnprocessedCell();
 
       if (!nextCell) {
         console.log("\n🎉 All cells processed!");
@@ -205,17 +174,17 @@ async function main() {
         console.log(
           `  🔄 Cell ${nextCell.h3Index} hit ${totalResults} results, subdividing...`
         );
-        await gridManager.subdivideCell(nextCell.h3Index);
+        await GRID_MANAGER.subdivideCell(nextCell.h3Index);
       } else {
         console.log(
           `  ✅ Cell ${nextCell.h3Index} completed with ${totalResults} results`
         );
-        await gridManager.markCellExhausted(nextCell.h3Index);
+        await GRID_MANAGER.markCellExhausted(nextCell.h3Index);
       }
 
       // Show updated stats periodically
       if (processedCount % 10 === 0) {
-        const updatedStats = await gridManager.getGridStats();
+        const updatedStats = await GRID_MANAGER.getGridStats();
         console.log("\nUpdated Grid Statistics:");
         for (const stat of updatedStats) {
           console.log(
@@ -225,7 +194,7 @@ async function main() {
       }
     }
 
-    const finalStats = await gridManager.getGridStats();
+    const finalStats = await GRID_MANAGER.getGridStats();
     console.log("\nFinal Grid Statistics:");
     for (const stat of finalStats) {
       console.log(
@@ -239,7 +208,7 @@ async function main() {
     throw error;
   } finally {
     // Always close the Natural Earth database connection
-    gridManager.close();
+    GRID_MANAGER.close();
   }
 }
 

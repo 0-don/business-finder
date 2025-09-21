@@ -32,6 +32,9 @@ export interface CellProgress {
 }
 
 export class NaturalEarthGridManager {
+  private static readonly MAX_RESOLUTION = 12; // ~330m cells
+  private static readonly MIN_CELL_SIZE_METERS = 200; // Don't subdivide below 200m
+
   /**
    * Generate initial 50km grid covering Germany using Natural Earth boundaries
    */
@@ -348,11 +351,21 @@ export class NaturalEarthGridManager {
    */
   async subdivideCell(parentH3Index: string): Promise<void> {
     const currentResolution = getResolution(parentH3Index);
-    const newResolution = Math.min(currentResolution + 1, 8); // Max resolution 8
+    const newResolution = currentResolution + 1;
 
-    if (newResolution > 8) {
+    // Check if we've hit maximum resolution or minimum cell size
+    if (newResolution > NaturalEarthGridManager.MAX_RESOLUTION) {
       console.log(
-        `Cannot subdivide ${parentH3Index} further (max resolution reached)`
+        `Cannot subdivide ${parentH3Index} further (max resolution ${NaturalEarthGridManager.MAX_RESOLUTION} reached)`
+      );
+      await this.markCellExhausted(parentH3Index);
+      return;
+    }
+
+    const newCellRadius = this.getSearchRadius(newResolution);
+    if (newCellRadius < NaturalEarthGridManager.MIN_CELL_SIZE_METERS) {
+      console.log(
+        `Cannot subdivide ${parentH3Index} further (minimum cell size ${NaturalEarthGridManager.MIN_CELL_SIZE_METERS}m reached)`
       );
       await this.markCellExhausted(parentH3Index);
       return;
@@ -370,6 +383,14 @@ export class NaturalEarthGridManager {
       const [lat, lng] = cellToLatLng(childH3);
       return this.isPointInGermany(lat, lng);
     });
+
+    if (validChildren.length === 0) {
+      console.log(
+        `No valid child cells found for ${parentH3Index}, marking as exhausted`
+      );
+      await this.markCellExhausted(parentH3Index);
+      return;
+    }
 
     console.log(`Adding ${validChildren.length} child cells`);
 
@@ -415,14 +436,18 @@ export class NaturalEarthGridManager {
   }
 
   private getSearchRadius(resolution: number): number {
-    const radiusMap: Record<number, number> = {
-      4: 50000, // ~50km
-      5: 20000, // ~20km
-      6: 8000, // ~8km
-      7: 3000, // ~3km
-      8: 1000, // ~1km
+    const h3CircumRadius: Record<number, number> = {
+      4: 27_700, // ~27.7km
+      5: 15_900, // ~15.9km
+      6: 9_150, // ~9.15km
+      7: 5_260, // ~5.26km
+      8: 3_020, // ~3.02km
+      9: 1_740, // ~1.74km
+      10: 1_000, // ~1km
+      11: 580, // ~580m
+      12: 330, // ~330m
     };
-    return radiusMap[resolution] || 50000;
+    return h3CircumRadius[resolution] || 27_700;
   }
 
   close(): void {
