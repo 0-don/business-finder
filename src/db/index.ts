@@ -4,11 +4,11 @@ import { getTableColumns, sql } from "drizzle-orm";
 import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
 import { drizzle as drizzlePostgres } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
-// import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
-// import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
 import * as naturalEarthSchema from "./natural-earth-schema/schema";
+// import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
+// import { migrate } from "drizzle-orm/postgres-js/migrator";
 
 export const db = drizzlePostgres(process.env.DATABASE_URL!);
 
