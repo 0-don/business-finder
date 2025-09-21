@@ -30,7 +30,7 @@ export interface CellProgress {
 
 export class TurfGridManager {
   private static readonly MAX_LEVEL = 8;
-  private static readonly MIN_RADIUS = 500; // 500m minimum
+  private static readonly MIN_RADIUS = 100; // 100m minimum
   private static readonly INITIAL_RADIUS = 50000; // 50km initial radius
 
   /**
