@@ -20,7 +20,6 @@ export interface GridStats {
   level: number;
   total: number;
   processed: number;
-  exhausted: number;
 }
 
 export interface CellProgress {
@@ -32,7 +31,7 @@ export interface CellProgress {
 export class TurfGridManager {
   private static readonly MAX_LEVEL = 8;
   private static readonly MIN_RADIUS = 500; // 500m minimum
-  private static readonly INITIAL_RADIUS = 25000; // 25km initial radius
+  private static readonly INITIAL_RADIUS = 50000; // 50km initial radius
 
   /**
    * Initialize grid covering Germany using regular spacing
@@ -65,8 +64,8 @@ export class TurfGridManager {
       bounds.maxLat,
     ];
 
-    // Generate grid points with 25km spacing
-    const spacing = 25; // kilometers
+    // Generate grid points with 50km spacing for initial coverage
+    const spacing = 50; // kilometers
     const points = turf.pointGrid(bbox, spacing, { units: "kilometers" });
 
     const gridCells: Array<{
@@ -157,7 +156,6 @@ export class TurfGridManager {
         level: gridCellSchema.level,
         total: count(),
         processed: sql<number>`count(case when ${gridCellSchema.isProcessed} then 1 end)`,
-        exhausted: sql<number>`count(case when ${gridCellSchema.isExhausted} then 1 end)`,
       })
       .from(gridCellSchema)
       .groupBy(gridCellSchema.level)
@@ -173,12 +171,7 @@ export class TurfGridManager {
     const [cell] = await db
       .select()
       .from(gridCellSchema)
-      .where(
-        and(
-          eq(gridCellSchema.isProcessed, false),
-          eq(gridCellSchema.isExhausted, false)
-        )
-      )
+      .where(eq(gridCellSchema.isProcessed, false))
       .orderBy(gridCellSchema.level, gridCellSchema.id)
       .limit(1);
 
@@ -233,7 +226,7 @@ export class TurfGridManager {
 
     const newLevel = parentCell.level + 1;
     const newRadius = Math.max(
-      Math.floor(parentCell.radius * 0.6),
+      Math.floor(parentCell.radius * 0.65),
       TurfGridManager.MIN_RADIUS
     );
 
@@ -241,16 +234,16 @@ export class TurfGridManager {
       newLevel > TurfGridManager.MAX_LEVEL ||
       newRadius < TurfGridManager.MIN_RADIUS
     ) {
-      console.log(`Cannot subdivide ${parentCellId} further`);
-      await this.markCellExhausted(parentCellId);
+      console.log(`Cannot subdivide ${parentCellId} further - removing cell`);
+      await this.removeExhaustedCell(parentCellId);
       return;
     }
 
     const centerLat = parseFloat(parentCell.latitude);
     const centerLng = parseFloat(parentCell.longitude);
 
-    // Create 2x2 grid with controlled overlap
-    const spacing = (newRadius * 1.4) / 1000; // ~30% overlap, convert to km for turf
+    // Create 4 circles with optimal spacing to minimize gaps
+    const spacing = (newRadius * 0.9) / 1000; // 90% of radius for better coverage
     const center = turf.point([centerLng, centerLat]);
 
     const childCells = [
@@ -269,7 +262,7 @@ export class TurfGridManager {
     }
 
     if (validChildren.length === 0) {
-      await this.markCellExhausted(parentCellId);
+      await this.removeExhaustedCell(parentCellId);
       return;
     }
 
@@ -301,17 +294,12 @@ export class TurfGridManager {
   }
 
   /**
-   * Mark cell as exhausted
+   * Remove exhausted cell completely from the database
    */
-  async markCellExhausted(cellId: string): Promise<void> {
-    await db
-      .update(gridCellSchema)
-      .set({
-        isExhausted: true,
-        isProcessed: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(gridCellSchema.cellId, cellId));
+  async removeExhaustedCell(cellId: string): Promise<void> {
+    await db.delete(gridCellSchema).where(eq(gridCellSchema.cellId, cellId));
+
+    console.log(`Removed exhausted cell: ${cellId}`);
   }
 
   private async isPointInGermany(lat: number, lng: number): Promise<boolean> {

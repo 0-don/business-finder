@@ -35,7 +35,6 @@ CREATE TABLE "grid_cell" (
 	"radius" integer NOT NULL,
 	"level" integer NOT NULL,
 	"is_processed" boolean DEFAULT false,
-	"is_exhausted" boolean DEFAULT false,
 	"current_page" integer DEFAULT 0,
 	"next_page_token" text,
 	"total_results" integer DEFAULT 0,

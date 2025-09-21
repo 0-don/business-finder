@@ -57,7 +57,6 @@ export const gridCellSchema = pgTable(
     radius: integer("radius").notNull(),
     level: integer("level").notNull(),
     isProcessed: boolean("is_processed").default(false),
-    isExhausted: boolean("is_exhausted").default(false),
     currentPage: integer("current_page").default(0),
     nextPageToken: text("next_page_token"),
     totalResults: integer("total_results").default(0),

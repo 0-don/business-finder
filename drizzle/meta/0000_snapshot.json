@@ -1,5 +1,5 @@
 {
-  "id": "70bf4dfb-200a-4be1-abcf-dc0600116d14",
+  "id": "886f5235-f67b-4ee7-893d-69cf53c820bf",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -257,13 +257,6 @@
         },
         "is_processed": {
           "name": "is_processed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "is_exhausted": {
-          "name": "is_exhausted",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
