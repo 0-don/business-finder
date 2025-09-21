@@ -1,6 +1,5 @@
 import "@dotenvx/dotenvx/config";
 import { Language, PlaceType1 } from "@googlemaps/google-maps-services-js";
-import { latLngToCell } from "h3-js";
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema, searchLogSchema } from "./db/schema";
 import {
@@ -10,26 +9,24 @@ import {
   MAX_RESULTS_PER_CELL,
   RESULTS_PER_PAGE,
 } from "./lib/constants";
-import { type NaturalEarthGridCell } from "./lib/natural-earth-grid";
+import type { GridCell } from "./lib/turf-grid";
 import { exponentialBackoff } from "./lib/utils";
 
-async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
-  const { h3Index, lat, lng, radius, resolution, admin1 } = gridCell;
+async function searchGridCell(gridCell: GridCell): Promise<number> {
+  const { cellId, lat, lng, radius, level, admin1 } = gridCell;
 
-  console.log(`\nSearching H3 cell: ${h3Index} (res: ${resolution})`);
+  console.log(`\nSearching cell: ${cellId} (level: ${level})`);
   console.log(`  Location: (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
-  console.log(`  Radius: ${radius / 1000}km`);
+  console.log(`  Radius: ${radius}m`);
   if (admin1) {
     console.log(`  Region: ${admin1}`);
   }
 
-  // Get current progress
-  const progress = await GRID_MANAGER.getCellProgress(h3Index);
+  const progress = await GRID_MANAGER.getCellProgress(cellId);
   let currentPage = progress?.currentPage || 0;
   let nextPageToken = progress?.nextPageToken;
   let totalResults = progress?.totalResults || 0;
 
-  // Continue from where we left off
   while (currentPage < MAX_PAGES_PER_CELL) {
     console.log(`  Page ${currentPage + 1}/${MAX_PAGES_PER_CELL}`);
 
@@ -55,12 +52,6 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
     // Process results
     for (const place of response.data.results) {
       if (place.place_id && place.name && place.geometry?.location) {
-        const businessH3 = latLngToCell(
-          place.geometry.location.lat,
-          place.geometry.location.lng,
-          8 // Highest resolution for businesses
-        );
-
         await db
           .insert(businessSchema)
           .values({
@@ -82,11 +73,10 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
             iconBackgroundColor: place.icon_background_color || null,
             iconMaskBaseUri: place.icon_mask_base_uri || null,
             priceLevel: place.price_level || null,
-            website: null, // Will be populated later
-            phoneNumber: null, // Will be populated later
-            internationalPhoneNumber: null, // Will be populated later
-            utcOffset: null, // Will be populated later
-            h3Index: businessH3,
+            website: null,
+            phoneNumber: null,
+            internationalPhoneNumber: null,
+            utcOffset: null,
           })
           .onConflictDoUpdate({
             target: businessSchema.placeId,
@@ -101,10 +91,10 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
 
     // Log search
     await db.insert(searchLogSchema).values({
-      h3Index,
-      resolution,
+      cellId,
       latitude: lat.toString(),
       longitude: lng.toString(),
+      radius,
       resultsFound: pageResults,
       pageNumber: currentPage + 1,
     });
@@ -112,48 +102,41 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
     nextPageToken = response.data.next_page_token;
     currentPage++;
 
-    // Update progress
     await GRID_MANAGER.updateCellProgress(
-      h3Index,
+      cellId,
       currentPage,
       nextPageToken,
       totalResults
     );
 
-    // If no more results, break early
     if (!nextPageToken || pageResults < RESULTS_PER_PAGE) {
-      console.log(`    No more results available, stopping early`);
+      console.log(`    No more results available`);
       break;
     }
   }
 
-  console.log(
-    `  ✓ Cell completed: ${totalResults} total results across ${currentPage} pages`
-  );
-
+  console.log(`  ✓ Cell completed: ${totalResults} total results`);
   return totalResults;
 }
 
 async function main() {
-  console.log("Starting Natural Earth-based business search...");
+  console.log("Starting Turf.js-based business search...");
 
   try {
-    // Initialize grid if needed
     const stats = await GRID_MANAGER.getGridStats();
     if (stats.length === 0) {
-      console.log("No grid found, initializing from Natural Earth data...");
+      console.log("Initializing grid...");
       await GRID_MANAGER.initializeGermanyGrid();
     }
 
-    // Show current stats
+    // Show stats
     console.log("\nGrid Statistics:");
     for (const stat of stats) {
       console.log(
-        `  Resolution ${stat.resolution}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
+        `  Level ${stat.level}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
       );
     }
 
-    // Process cells one by one
     let processedCount = 0;
     while (true) {
       const nextCell = await GRID_MANAGER.getNextUnprocessedCell();
@@ -168,45 +151,20 @@ async function main() {
 
       const totalResults = await searchGridCell(nextCell);
 
-      // Decision logic: subdivide if we hit the maximum results threshold
       if (totalResults >= MAX_RESULTS_PER_CELL) {
-        console.log(
-          `  🔄 Cell ${nextCell.h3Index} hit ${totalResults} results, subdividing...`
-        );
-        await GRID_MANAGER.subdivideCell(nextCell.h3Index);
+        console.log(`  🔄 Subdividing cell ${nextCell.cellId}...`);
+        await GRID_MANAGER.subdivideCell(nextCell.cellId);
       } else {
-        console.log(
-          `  ✅ Cell ${nextCell.h3Index} completed with ${totalResults} results`
-        );
-        await GRID_MANAGER.markCellExhausted(nextCell.h3Index);
-      }
-
-      // Show updated stats periodically
-      if (processedCount % 10 === 0) {
-        const updatedStats = await GRID_MANAGER.getGridStats();
-        console.log("\nUpdated Grid Statistics:");
-        for (const stat of updatedStats) {
-          console.log(
-            `  Resolution ${stat.resolution}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
-          );
-        }
+        console.log(`  ✅ Cell ${nextCell.cellId} exhausted`);
+        await GRID_MANAGER.markCellExhausted(nextCell.cellId);
       }
     }
 
-    const finalStats = await GRID_MANAGER.getGridStats();
-    console.log("\nFinal Grid Statistics:");
-    for (const stat of finalStats) {
-      console.log(
-        `  Resolution ${stat.resolution}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
-      );
-    }
-
-    console.log("\n✅ Search completed successfully!");
+    console.log("\n✅ Search completed!");
   } catch (error) {
-    console.error("Error during search process:", error);
+    console.error("Error:", error);
     throw error;
   } finally {
-    // Always close the Natural Earth database connection
     GRID_MANAGER.close();
   }
 }

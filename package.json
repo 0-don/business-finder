@@ -12,10 +12,11 @@
     "@googlemaps/google-maps-services-js": "^3.4.2",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
+    "@turf/turf": "^7.2.0",
     "h3-js": "^4.3.0"
   },
-  "devDependencies": {
     "@dotenvx/dotenvx": "^1.50.1",
+  "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "latest",
     "@types/node": "latest",
