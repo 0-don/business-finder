@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "bun run --bun --watch src/index.ts",
     "drizzle": "bun run --bun reset && drizzle-kit generate",
-    "setup:natural-earth": "bun run --bun scripts/setup-natural-earth.ts", 
+    "setup:natural-earth": "bun run --bun scripts/setup-natural-earth.ts",
     "introspect:natural-earth": "bun run setup:natural-earth && drizzle-kit introspect --config=drizzle-natural-earth.config.ts",
-    "reset": "bun --bun ./drizzle/reset-db.ts"
+    "reset": "bun --bun ./drizzle/reset-db.ts",
+    "postinstall": "bun setup:natural-earth"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",

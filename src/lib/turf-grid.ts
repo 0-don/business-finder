@@ -1,6 +1,10 @@
 import * as turf from "@turf/turf";
 import { and, count, eq, sql } from "drizzle-orm";
-import { db, sqlite } from "../db";
+import { db, naturalEarthDb } from "../db";
+import {
+  ne10MAdmin0Countries,
+  ne10MPopulatedPlaces,
+} from "../db/natural-earth-schema/schema";
 import { gridCellSchema } from "../db/schema";
 
 export interface GridCell {
@@ -10,7 +14,6 @@ export interface GridCell {
   radius: number;
   level: number;
   country: string;
-  admin1?: string;
 }
 
 export interface GridStats {
@@ -37,38 +40,29 @@ export class TurfGridManager {
   async initializeGermanyGrid(): Promise<void> {
     console.log("Initializing grid for Germany using Turf.js...");
 
-    // Get Germany bounds from Natural Earth
-    const germanyBounds = sqlite
-      .prepare(
-        `
-      SELECT 
-        MIN(label_x) as min_lng,
-        MAX(label_x) as max_lng,
-        MIN(label_y) as min_lat,
-        MAX(label_y) as max_lat
-      FROM ne_10m_admin_0_countries 
-      WHERE iso_a3 = 'DEU'
-    `
-      )
-      .get() as
-      | {
-          min_lng: number;
-          max_lng: number;
-          min_lat: number;
-          max_lat: number;
-        }
-      | undefined;
+    // Get Germany bounds from Natural Earth using Drizzle
+    const germanyBounds = await naturalEarthDb
+      .select({
+        minLng: sql<number>`MIN(${ne10MAdmin0Countries.labelX})`,
+        maxLng: sql<number>`MAX(${ne10MAdmin0Countries.labelX})`,
+        minLat: sql<number>`MIN(${ne10MAdmin0Countries.labelY})`,
+        maxLat: sql<number>`MAX(${ne10MAdmin0Countries.labelY})`,
+      })
+      .from(ne10MAdmin0Countries)
+      .where(eq(ne10MAdmin0Countries.isoA3, "DEU"));
 
-    if (!germanyBounds) {
+    if (!germanyBounds[0]) {
       throw new Error("Germany boundaries not found");
     }
 
+    const bounds = germanyBounds[0];
+
     // Create bounding box
     const bbox: [number, number, number, number] = [
-      germanyBounds.min_lng,
-      germanyBounds.min_lat,
-      germanyBounds.max_lng,
-      germanyBounds.max_lat,
+      bounds.minLng,
+      bounds.minLat,
+      bounds.maxLng,
+      bounds.maxLat,
     ];
 
     // Generate grid points with 25km spacing
@@ -88,7 +82,7 @@ export class TurfGridManager {
       const [lng, lat] = point.geometry.coordinates;
 
       // Check if point is within Germany
-      if (this.isPointInGermany(lat!, lng!)) {
+      if (await this.isPointInGermany(lat!, lng!)) {
         gridCells.push({
           cellId: `cell_${cellIndex++}_level_0`,
           latitude: lat!.toString(),
@@ -193,26 +187,27 @@ export class TurfGridManager {
     const lat = parseFloat(cell.latitude);
     const lng = parseFloat(cell.longitude);
 
-    // Get nearby places for context
-    const nearbyPlaces = sqlite
-      .prepare(
-        `
-      SELECT name, featurecla, pop_max
-      FROM ne_10m_populated_places 
-      WHERE iso_a2 = 'DE'
-      AND latitude BETWEEN ? AND ?
-      AND longitude BETWEEN ? AND ?
-      ORDER BY pop_max DESC
-      LIMIT 1
-    `
+    // Get nearby places for context using Drizzle
+    const nearbyPlaces = await naturalEarthDb
+      .select({
+        name: ne10MPopulatedPlaces.name,
+        featurecla: ne10MPopulatedPlaces.featurecla,
+        popMax: ne10MPopulatedPlaces.popMax,
+      })
+      .from(ne10MPopulatedPlaces)
+      .where(
+        and(
+          eq(ne10MPopulatedPlaces.isoA2, "DE"),
+          sql`${ne10MPopulatedPlaces.latitude} BETWEEN ${lat - 0.2} AND ${
+            lat + 0.2
+          }`,
+          sql`${ne10MPopulatedPlaces.longitude} BETWEEN ${lng - 0.2} AND ${
+            lng + 0.2
+          }`
+        )
       )
-      .get(lat - 0.2, lat + 0.2, lng - 0.2, lng + 0.2) as
-      | {
-          name: string;
-          featurecla: string;
-          pop_max: number;
-        }
-      | undefined;
+      .orderBy(sql`${ne10MPopulatedPlaces.popMax} DESC`)
+      .limit(1);
 
     return {
       cellId: cell.cellId,
@@ -221,7 +216,6 @@ export class TurfGridManager {
       radius: cell.radius,
       level: cell.level,
       country: "Germany",
-      admin1: nearbyPlaces?.name,
     };
   }
 
@@ -266,10 +260,13 @@ export class TurfGridManager {
       turf.destination(center, spacing, 315), // Northwest
     ];
 
-    const validChildren = childCells.filter((child) => {
+    const validChildren = [];
+    for (const child of childCells) {
       const [lng, lat] = child.geometry.coordinates;
-      return this.isPointInGermany(lat!, lng!);
-    });
+      if (await this.isPointInGermany(lat!, lng!)) {
+        validChildren.push(child);
+      }
+    }
 
     if (validChildren.length === 0) {
       await this.markCellExhausted(parentCellId);
@@ -317,26 +314,25 @@ export class TurfGridManager {
       .where(eq(gridCellSchema.cellId, cellId));
   }
 
-  private isPointInGermany(lat: number, lng: number): boolean {
-    const nearbyPlaces = sqlite
-      .prepare(
-        `
-      SELECT COUNT(*) as count
-      FROM ne_10m_populated_places 
-      WHERE iso_a2 = 'DE' 
-      AND latitude BETWEEN ? AND ?
-      AND longitude BETWEEN ? AND ?
-      LIMIT 1
-    `
+  private async isPointInGermany(lat: number, lng: number): Promise<boolean> {
+    const nearbyPlaces = await naturalEarthDb
+      .select({
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(ne10MPopulatedPlaces)
+      .where(
+        and(
+          eq(ne10MPopulatedPlaces.isoA2, "DE"),
+          sql`${ne10MPopulatedPlaces.latitude} BETWEEN ${lat - 0.5} AND ${
+            lat + 0.5
+          }`,
+          sql`${ne10MPopulatedPlaces.longitude} BETWEEN ${lng - 0.5} AND ${
+            lng + 0.5
+          }`
+        )
       )
-      .get(lat - 0.5, lat + 0.5, lng - 0.5, lng + 0.5) as
-      | { count: number }
-      | undefined;
+      .limit(1);
 
-    return (nearbyPlaces?.count ?? 0) > 0;
-  }
-
-  close(): void {
-    sqlite.close();
+    return (nearbyPlaces[0]?.count ?? 0) > 0;
   }
 }

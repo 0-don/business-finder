@@ -1,4 +1,5 @@
 import "@dotenvx/dotenvx/config";
+import { getPlacesNearby } from "./client";
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema } from "./db/schema";
 import {
@@ -8,17 +9,13 @@ import {
   RESULTS_PER_PAGE,
 } from "./lib/constants";
 import type { GridCell } from "./lib/turf-grid";
-import { getPlacesNearby } from "./client";
 
 async function searchGridCell(gridCell: GridCell): Promise<number> {
-  const { cellId, lat, lng, radius, level, admin1 } = gridCell;
+  const { cellId, lat, lng, radius, level } = gridCell;
 
   console.log(`\nSearching cell: ${cellId} (level: ${level})`);
   console.log(`  Location: (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
   console.log(`  Radius: ${radius}m`);
-  if (admin1) {
-    console.log(`  Region: ${admin1}`);
-  }
 
   const progress = await GRID_MANAGER.getCellProgress(cellId);
   let currentPage = progress?.currentPage || 0;
@@ -139,8 +136,6 @@ async function main() {
   } catch (error) {
     console.error("Error:", error);
     throw error;
-  } finally {
-    GRID_MANAGER.close();
   }
 }
 
