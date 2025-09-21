@@ -13,7 +13,6 @@ export interface GridCell {
   lng: number;
   radius: number;
   level: number;
-  country: string;
 }
 
 export interface GridStats {
@@ -37,8 +36,6 @@ export class TurfGridManager {
    * Initialize grid covering Germany using regular spacing
    */
   async initializeGermanyGrid(): Promise<void> {
-    console.log("Initializing grid for Germany using Turf.js...");
-
     // Get Germany bounds from Natural Earth using Drizzle
     const germanyBounds = await naturalEarthDb
       .select({
@@ -208,7 +205,6 @@ export class TurfGridManager {
       lng,
       radius: cell.radius,
       level: cell.level,
-      country: "Germany",
     };
   }
 
@@ -322,5 +318,12 @@ export class TurfGridManager {
       .limit(1);
 
     return (nearbyPlaces[0]?.count ?? 0) > 0;
+  }
+
+  async markCellExhausted(cellId: string): Promise<void> {
+    await db
+      .update(gridCellSchema)
+      .set({ isProcessed: true, updatedAt: new Date() })
+      .where(eq(gridCellSchema.cellId, cellId));
   }
 }

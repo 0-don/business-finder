@@ -105,7 +105,7 @@ async function main() {
     console.log("\nGrid Statistics:");
     for (const stat of stats) {
       console.log(
-        `  Level ${stat.level}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
+        `  Level ${stat.level}: ${stat.processed}/${stat.total} processed`
       );
     }
 
