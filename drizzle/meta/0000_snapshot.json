@@ -1,5 +1,5 @@
 {
-  "id": "3c81a13d-7351-4967-9e1a-b371aef5869b",
+  "id": "70bf4dfb-200a-4be1-abcf-dc0600116d14",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -332,114 +332,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.search_log": {
-      "name": "search_log",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "cell_id": {
-          "name": "cell_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "latitude": {
-          "name": "latitude",
-          "type": "numeric(10, 8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "longitude": {
-          "name": "longitude",
-          "type": "numeric(11, 8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "radius": {
-          "name": "radius",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "results_found": {
-          "name": "results_found",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "page_number": {
-          "name": "page_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "searched_at": {
-          "name": "searched_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.search_state": {
-      "name": "search_state",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "region_index": {
-          "name": "region_index",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "page_index": {
-          "name": "page_index",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "next_page_token": {
-          "name": "next_page_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
