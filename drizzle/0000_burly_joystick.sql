@@ -22,7 +22,6 @@ CREATE TABLE "business" (
 	"phone_number" text,
 	"international_phone_number" text,
 	"utc_offset" integer,
-	"h3_index" text,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now(),
 	CONSTRAINT "business_place_id_unique" UNIQUE("place_id")
@@ -30,10 +29,11 @@ CREATE TABLE "business" (
 --> statement-breakpoint
 CREATE TABLE "grid_cell" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"h3_index" text NOT NULL,
-	"resolution" integer NOT NULL,
+	"cell_id" text NOT NULL,
 	"latitude" numeric(10, 8) NOT NULL,
 	"longitude" numeric(11, 8) NOT NULL,
+	"radius" integer NOT NULL,
+	"level" integer NOT NULL,
 	"is_processed" boolean DEFAULT false,
 	"is_exhausted" boolean DEFAULT false,
 	"current_page" integer DEFAULT 0,
@@ -41,15 +41,15 @@ CREATE TABLE "grid_cell" (
 	"total_results" integer DEFAULT 0,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now(),
-	CONSTRAINT "grid_cell_h3_index_unique" UNIQUE("h3_index")
+	CONSTRAINT "grid_cell_cell_id_unique" UNIQUE("cell_id")
 );
 --> statement-breakpoint
 CREATE TABLE "search_log" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"h3_index" text NOT NULL,
-	"resolution" integer NOT NULL,
+	"cell_id" text NOT NULL,
 	"latitude" numeric(10, 8) NOT NULL,
 	"longitude" numeric(11, 8) NOT NULL,
+	"radius" integer NOT NULL,
 	"results_found" integer NOT NULL,
 	"page_number" integer NOT NULL,
 	"searched_at" timestamp DEFAULT now()
@@ -65,4 +65,4 @@ CREATE TABLE "search_state" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX "idx_place_id" ON "business" USING btree ("place_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_location" ON "business" USING btree ("latitude","longitude");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_h3_index" ON "grid_cell" USING btree ("h3_index");
+CREATE UNIQUE INDEX "idx_cell_id" ON "grid_cell" USING btree ("cell_id");
