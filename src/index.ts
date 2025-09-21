@@ -1,16 +1,17 @@
 import "@dotenvx/dotenvx/config";
 import { Language, PlaceType1 } from "@googlemaps/google-maps-services-js";
 import { latLngToCell } from "h3-js";
-import { getPlaceDetails } from "./client";
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema, searchLogSchema } from "./db/schema";
-import { CLIENT, GRID_MANAGER } from "./lib/constants";
+import {
+  CLIENT,
+  GRID_MANAGER,
+  MAX_PAGES_PER_CELL,
+  MAX_RESULTS_PER_CELL,
+  RESULTS_PER_PAGE,
+} from "./lib/constants";
 import { type NaturalEarthGridCell } from "./lib/natural-earth-grid";
 import { exponentialBackoff } from "./lib/utils";
-
-const MAX_PAGES_PER_CELL = 3;
-const RESULTS_PER_PAGE = 20;
-const MAX_RESULTS_PER_CELL = 60; // 20 results × 3 pages - subdivision threshold
 
 async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
   const { h3Index, lat, lng, radius, resolution, admin1 } = gridCell;
@@ -54,7 +55,6 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
     // Process results
     for (const place of response.data.results) {
       if (place.place_id && place.name && place.geometry?.location) {
-        const details = await getPlaceDetails(place.place_id);
         const businessH3 = latLngToCell(
           place.geometry.location.lat,
           place.geometry.location.lng,
@@ -75,18 +75,17 @@ async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
             longitude: place.geometry.location.lng.toString(),
             businessStatus: place.business_status || null,
             types: place.types || null,
-            openingHours: details?.opening_hours || place.opening_hours || null,
+            openingHours: place.opening_hours || null,
             photos: place.photos || null,
             plusCode: place.plus_code || null,
             icon: place.icon || null,
             iconBackgroundColor: place.icon_background_color || null,
             iconMaskBaseUri: place.icon_mask_base_uri || null,
             priceLevel: place.price_level || null,
-            website: details?.website || null,
-            phoneNumber: details?.formatted_phone_number || null,
-            internationalPhoneNumber:
-              details?.international_phone_number || null,
-            utcOffset: details?.utc_offset || null,
+            website: null, // Will be populated later
+            phoneNumber: null, // Will be populated later
+            internationalPhoneNumber: null, // Will be populated later
+            utcOffset: null, // Will be populated later
             h3Index: businessH3,
           })
           .onConflictDoUpdate({
