@@ -5,19 +5,23 @@
   "private": true,
   "scripts": {
     "dev": "bun run --bun --watch src/index.ts",
-    "drizzle": "bun run reset && drizzle-kit generate",
-    "reset": "bun ./drizzle/reset-db.ts"
+    "drizzle": "bun run --bun reset && drizzle-kit generate",
+    "setup:natural-earth": "bun run --bun scripts/setup-natural-earth.ts", 
+    "introspect:natural-earth": "bun run setup:natural-earth && drizzle-kit introspect --config=drizzle-natural-earth.config.ts",
+    "reset": "bun --bun ./drizzle/reset-db.ts"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
     "better-sqlite3": "^12.2.0",
-    "drizzle-orm": "^0.44.4",
+    "drizzle-orm": "^0.44.5",
     "@turf/turf": "^7.2.0",
+    "unzipper": "^0.12.3",
     "h3-js": "^4.3.0"
   },
-    "@dotenvx/dotenvx": "^1.50.1",
   "devDependencies": {
+    "@dotenvx/dotenvx": "^1.50.1",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/unzipper": "^0.10.11",
     "@types/bun": "latest",
     "@types/node": "latest",
     "drizzle-kit": "^0.31.4",
