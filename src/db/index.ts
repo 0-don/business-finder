@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { log } from "console";
 import { getTableColumns, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sql";
@@ -8,6 +9,10 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
 
 export const db = drizzle(process.env.DATABASE_URL!);
+
+export const sqlite = new Database("./natural_earth_vector.sqlite", {
+  readonly: true,
+});
 
 export function conflictUpdateAllExcept<
   T extends PgTable,

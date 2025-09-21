@@ -1,4 +1,4 @@
-# steuerberater
+# business-finder
 
 To install dependencies:
 
@@ -13,3 +13,5 @@ bun run index.ts
 ```
 
 This project was created using `bun init` in bun v1.2.22. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+
+<!-- https://naciscdn.org/naturalearth/packages/natural_earth_vector.sqlite.zip -->

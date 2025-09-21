@@ -1,4 +1,6 @@
+// src/db/schema.ts
 import {
+  boolean,
   decimal,
   integer,
   jsonb,
@@ -35,6 +37,7 @@ export const businessSchema = pgTable(
     phoneNumber: text("phone_number"),
     internationalPhoneNumber: text("international_phone_number"),
     utcOffset: integer("utc_offset"),
+    h3Index: text("h3_index"), // Add this field
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -46,12 +49,35 @@ export const businessSchema = pgTable(
   ]
 );
 
+export const gridCellSchema = pgTable(
+  "grid_cell",
+  {
+    id: serial("id").primaryKey(),
+    h3Index: text("h3_index").notNull().unique(),
+    resolution: integer("resolution").notNull(),
+    latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+    longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+    isProcessed: boolean("is_processed").default(false),
+    isExhausted: boolean("is_exhausted").default(false),
+    currentPage: integer("current_page").default(0),
+    nextPageToken: text("next_page_token"),
+    totalResults: integer("total_results").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [uniqueIndex("idx_h3_index").on(table.h3Index)]
+);
+
 export const searchLogSchema = pgTable("search_log", {
   id: serial("id").primaryKey(),
-  regionIndex: integer("region_index").notNull(),
+  h3Index: text("h3_index").notNull(), // Add this field
+  resolution: integer("resolution").notNull(), // Add this field
   latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
   longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
   resultsFound: integer("results_found").notNull(),
+  pageNumber: integer("page_number").notNull(), // Add this field
   searchedAt: timestamp("searched_at").defaultNow(),
 });
 

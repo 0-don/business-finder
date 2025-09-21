@@ -4,16 +4,21 @@ import {
   Language,
   PlaceType1,
 } from "@googlemaps/google-maps-services-js";
+import { latLngToCell } from "h3-js";
 import { conflictUpdateAllExcept, db } from "./db";
 import { businessSchema, searchLogSchema } from "./db/schema";
-import { GERMANY_POPULATION_GRID, type GridCell } from "./lib/germany-grid";
 import {
-  exponentialBackoff,
-  getSearchState,
-  updateSearchState,
-} from "./lib/utils";
+  NaturalEarthGridManager,
+  type NaturalEarthGridCell,
+} from "./lib/natural-earth-grid";
+import { exponentialBackoff } from "./lib/utils";
 
-const client = new Client({});
+const client = new Client();
+const gridManager = new NaturalEarthGridManager();
+
+const MAX_PAGES_PER_CELL = 3;
+const RESULTS_PER_PAGE = 20;
+const MAX_RESULTS_PER_CELL = 60; // 20 results × 3 pages - subdivision threshold
 
 async function getPlaceDetails(placeId: string) {
   return exponentialBackoff(async () => {
@@ -28,7 +33,7 @@ async function getPlaceDetails(placeId: string) {
           "utc_offset",
         ],
         language: Language.de,
-        key: process.env.GOOGLE_MAPS_API_KEY,
+        key: process.env.GOOGLE_MAPS_API_KEY!,
       },
     });
     return response.data.result;
@@ -38,26 +43,25 @@ async function getPlaceDetails(placeId: string) {
   });
 }
 
-async function searchRegion(
-  gridCell: GridCell,
-  regionIndex: number,
-  startPageIndex = 0,
-  startPageToken?: string | null
-) {
-  let totalResults = 0;
-  let nextPageToken: string | undefined = startPageToken || undefined;
-  let pageCount = startPageIndex;
+async function searchGridCell(gridCell: NaturalEarthGridCell): Promise<number> {
+  const { h3Index, lat, lng, radius, resolution, admin1 } = gridCell;
 
-  const { lat, lng, radius, cellSize, populationDensity, nearestCity } =
-    gridCell;
+  console.log(`\nSearching H3 cell: ${h3Index} (res: ${resolution})`);
+  console.log(`  Location: (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+  console.log(`  Radius: ${radius / 1000}km`);
+  if (admin1) {
+    console.log(`  Region: ${admin1}`);
+  }
 
-  console.log(
-    `  Searching ${populationDensity} density area near ${nearestCity || "rural"}`
-  );
-  console.log(`  Cell: ${cellSize}km, Radius: ${radius / 1000}km`);
+  // Get current progress
+  const progress = await gridManager.getCellProgress(h3Index);
+  let currentPage = progress?.currentPage || 0;
+  let nextPageToken = progress?.nextPageToken;
+  let totalResults = progress?.totalResults || 0;
 
-  do {
-    console.log(`    Page ${pageCount + 1}`);
+  // Continue from where we left off
+  while (currentPage < MAX_PAGES_PER_CELL) {
+    console.log(`  Page ${currentPage + 1}/${MAX_PAGES_PER_CELL}`);
 
     const response = await exponentialBackoff(async () => {
       return client.placesNearby({
@@ -68,7 +72,7 @@ async function searchRegion(
           keyword:
             "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
           language: Language.de,
-          key: process.env.GOOGLE_MAPS_API_KEY,
+          key: process.env.GOOGLE_MAPS_API_KEY!,
           ...(nextPageToken && { pagetoken: nextPageToken }),
         },
       });
@@ -76,11 +80,17 @@ async function searchRegion(
 
     const pageResults = response.data.results.length;
     totalResults += pageResults;
-    console.log(`      ${pageResults} results`);
+    console.log(`    Found ${pageResults} results`);
 
+    // Process results
     for (const place of response.data.results) {
       if (place.place_id && place.name && place.geometry?.location) {
         const details = await getPlaceDetails(place.place_id);
+        const businessH3 = latLngToCell(
+          place.geometry.location.lat,
+          place.geometry.location.lng,
+          8 // Highest resolution for businesses
+        );
 
         await db
           .insert(businessSchema)
@@ -108,6 +118,7 @@ async function searchRegion(
             internationalPhoneNumber:
               details?.international_phone_number || null,
             utcOffset: details?.utc_offset || null,
+            h3Index: businessH3,
           })
           .onConflictDoUpdate({
             target: businessSchema.placeId,
@@ -120,56 +131,119 @@ async function searchRegion(
       }
     }
 
+    // Log search
+    await db.insert(searchLogSchema).values({
+      h3Index,
+      resolution,
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      resultsFound: pageResults,
+      pageNumber: currentPage + 1,
+    });
+
     nextPageToken = response.data.next_page_token;
-    pageCount++;
+    currentPage++;
 
-    await updateSearchState(regionIndex, pageCount, nextPageToken);
-  } while (nextPageToken && pageCount < 3);
+    // Update progress
+    await gridManager.updateCellProgress(
+      h3Index,
+      currentPage,
+      nextPageToken,
+      totalResults
+    );
 
-  await db.insert(searchLogSchema).values({
-    regionIndex,
-    latitude: lat.toString(),
-    longitude: lng.toString(),
-    resultsFound: totalResults,
-  });
+    // If no more results, break early
+    if (!nextPageToken || pageResults < RESULTS_PER_PAGE) {
+      console.log(`    No more results available, stopping early`);
+      break;
+    }
+  }
 
-  console.log(`    ✓ Region completed: ${totalResults} total results`);
+  console.log(
+    `  ✓ Cell completed: ${totalResults} total results across ${currentPage} pages`
+  );
+
   return totalResults;
 }
 
 async function main() {
-  console.log("Starting population-based business search...");
-  console.log(`Total regions to search: ${GERMANY_POPULATION_GRID.length}`);
+  console.log("Starting Natural Earth-based business search...");
 
-  const state = await getSearchState();
-  console.log(
-    `Resuming from region ${state.regionIndex + 1}/${GERMANY_POPULATION_GRID.length}, page ${state.pageIndex + 1}`
-  );
+  try {
+    // Initialize grid if needed
+    const stats = await gridManager.getGridStats();
+    if (stats.length === 0) {
+      console.log("No grid found, initializing from Natural Earth data...");
+      await gridManager.initializeGermanyGrid();
+    }
 
-  for (let i = state.regionIndex; i < GERMANY_POPULATION_GRID.length; i++) {
-    const gridCell = GERMANY_POPULATION_GRID[i]!;
+    // Show current stats
+    console.log("\nGrid Statistics:");
+    for (const stat of stats) {
+      console.log(
+        `  Resolution ${stat.resolution}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
+      );
+    }
 
-    console.log(`\nRegion ${i + 1}/${GERMANY_POPULATION_GRID.length}:`);
-    console.log(`  Location: (${gridCell.lat}, ${gridCell.lng})`);
-    console.log(
-      `  Type: ${gridCell.populationDensity} density (${gridCell.cellSize}km cells)`
-    );
+    // Process cells one by one
+    let processedCount = 0;
+    while (true) {
+      const nextCell = await gridManager.getNextUnprocessedCell();
 
-    const startPageIndex = i === state.regionIndex ? state.pageIndex : 0;
-    const startPageToken =
-      i === state.regionIndex ? state.nextPageToken : undefined;
+      if (!nextCell) {
+        console.log("\n🎉 All cells processed!");
+        break;
+      }
 
-    await searchRegion(
-      gridCell,
-      i,
-      startPageIndex,
-      startPageToken || undefined
-    );
+      processedCount++;
+      console.log(`\n--- Processing cell ${processedCount} ---`);
 
-    await updateSearchState(i + 1, 0, null);
+      const totalResults = await searchGridCell(nextCell);
+
+      // Decision logic: subdivide if we hit the maximum results threshold
+      if (totalResults >= MAX_RESULTS_PER_CELL) {
+        console.log(
+          `  🔄 Cell ${nextCell.h3Index} hit ${totalResults} results, subdividing...`
+        );
+        await gridManager.subdivideCell(nextCell.h3Index);
+      } else {
+        console.log(
+          `  ✅ Cell ${nextCell.h3Index} completed with ${totalResults} results`
+        );
+        await gridManager.markCellExhausted(nextCell.h3Index);
+      }
+
+      // Show updated stats periodically
+      if (processedCount % 10 === 0) {
+        const updatedStats = await gridManager.getGridStats();
+        console.log("\nUpdated Grid Statistics:");
+        for (const stat of updatedStats) {
+          console.log(
+            `  Resolution ${stat.resolution}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
+          );
+        }
+      }
+    }
+
+    const finalStats = await gridManager.getGridStats();
+    console.log("\nFinal Grid Statistics:");
+    for (const stat of finalStats) {
+      console.log(
+        `  Resolution ${stat.resolution}: ${stat.processed}/${stat.total} processed (${stat.exhausted} exhausted)`
+      );
+    }
+
+    console.log("\n✅ Search completed successfully!");
+  } catch (error) {
+    console.error("Error during search process:", error);
+    throw error;
+  } finally {
+    // Always close the Natural Earth database connection
+    gridManager.close();
   }
-
-  console.log("\n🎉 Population-based search completed!");
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
