@@ -17,6 +17,7 @@
     "drizzle-orm": "^0.44.5",
     "h3-js": "^4.3.0",
     "unzipper": "^0.12.3",
+    "vite-plugin-restart": "^1.0.0",
     "wkx": "^0.5.0"
   },
   "devDependencies": {
