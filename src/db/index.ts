@@ -1,9 +1,9 @@
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import { log } from "console";
 import { getTableColumns, sql } from "drizzle-orm";
-import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
 import { drizzle as drizzlePostgres } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
+import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
 import * as naturalEarthSchema from "./natural-earth-schema/schema";
@@ -12,8 +12,8 @@ import * as naturalEarthSchema from "./natural-earth-schema/schema";
 
 export const db = drizzlePostgres(process.env.DATABASE_URL!);
 
-export const naturalEarthDb = drizzleSqlite(
-  new Database("natural_earth_vector.sqlite", { readonly: true }),
+export const naturalEarthDb = drizzleLibsql(
+  createClient({ url: "file:natural_earth_vector.sqlite" }),
   { schema: naturalEarthSchema }
 );
 

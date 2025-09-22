@@ -8,14 +8,14 @@ import {
   MAX_RESULTS_PER_CELL,
   RESULTS_PER_PAGE,
 } from "./lib/constants";
-import type { GridCell } from "./lib/turf-grid";
+import { GridCell } from "./types";
 
 async function searchGridCell(gridCell: GridCell): Promise<number> {
   const { cellId, lat, lng, radius, level } = gridCell;
 
-  console.log(`\nSearching cell: ${cellId} (level: ${level})`);
-  console.log(`  Location: (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
-  console.log(`  Radius: ${radius}m`);
+  console.log(
+    `Searching ${cellId} (L${level}) - ${lat.toFixed(3)},${lng.toFixed(3)} R:${radius}m`
+  );
 
   const progress = await GRID_MANAGER.getCellProgress(cellId);
   let currentPage = progress?.currentPage || 0;
@@ -23,15 +23,15 @@ async function searchGridCell(gridCell: GridCell): Promise<number> {
   let totalResults = progress?.totalResults || 0;
 
   while (currentPage < MAX_PAGES_PER_CELL) {
-    console.log(`  Page ${currentPage + 1}/${MAX_PAGES_PER_CELL}`);
-
     const response = await getPlacesNearby(lat, lng, radius, nextPageToken);
-
     const pageResults = response.data.results.length;
     totalResults += pageResults;
-    console.log(`    Found ${pageResults} results`);
 
-    // Process results
+    if (pageResults > 0) {
+      console.log(`  P${currentPage + 1}: ${pageResults} results`);
+    }
+
+    // Process results (same as before)
     for (const place of response.data.results) {
       if (place.place_id && place.name && place.geometry?.location) {
         await db
@@ -81,18 +81,15 @@ async function searchGridCell(gridCell: GridCell): Promise<number> {
       totalResults
     );
 
-    if (!nextPageToken || pageResults < RESULTS_PER_PAGE) {
-      console.log(`    No more results available`);
-      break;
-    }
+    if (!nextPageToken || pageResults < RESULTS_PER_PAGE) break;
   }
 
-  console.log(`  ✓ Cell completed: ${totalResults} total results`);
+  console.log(`  Complete: ${totalResults} total`);
   return totalResults;
 }
 
 async function main() {
-  console.log("Starting Turf.js-based business search...");
+  console.log("Starting business search...");
 
   try {
     const stats = await GRID_MANAGER.getGridStats();
@@ -101,44 +98,40 @@ async function main() {
       await GRID_MANAGER.initializeGermanyGrid();
     }
 
-    // Show stats
-    console.log("\nGrid Statistics:");
-    for (const stat of stats) {
-      console.log(
-        `  Level ${stat.level}: ${stat.processed}/${stat.total} processed`
-      );
-    }
+    // Compact stats display
+    const statsSummary = stats
+      .map((s) => `L${s.level}:${s.processed}/${s.total}`)
+      .join(" ");
+    console.log(`Grid: ${statsSummary}`);
 
     let processedCount = 0;
     while (true) {
       const nextCell = await GRID_MANAGER.getNextUnprocessedCell();
 
       if (!nextCell) {
-        console.log("\n🎉 All cells processed!");
+        console.log("All cells processed!");
         break;
       }
 
       processedCount++;
-      console.log(`\n--- Processing cell ${processedCount} ---`);
-
       const totalResults = await searchGridCell(nextCell);
 
       if (totalResults >= MAX_RESULTS_PER_CELL) {
-        console.log(`  🔄 Subdividing cell ${nextCell.cellId}...`);
+        console.log(
+          `  Subdividing (${totalResults} >= ${MAX_RESULTS_PER_CELL})`
+        );
         await GRID_MANAGER.subdivideCell(nextCell.cellId);
       } else {
-        console.log(`  ✅ Cell ${nextCell.cellId} exhausted`);
         await GRID_MANAGER.markCellExhausted(nextCell.cellId);
       }
     }
 
-    console.log("\n✅ Search completed!");
+    console.log("Search completed!");
   } catch (error) {
     console.error("Error:", error);
     throw error;
   }
 }
-
 main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);

@@ -1,83 +1,63 @@
 import * as turf from "@turf/turf";
-import { and, count, eq, sql } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import { db, naturalEarthDb } from "../db";
-import {
-  ne10MAdmin0Countries,
-  ne10MPopulatedPlaces,
-} from "../db/natural-earth-schema/schema";
+import { ne10MAdmin0Countries } from "../db/natural-earth-schema/schema";
 import { gridCellSchema } from "../db/schema";
-
-export interface GridCell {
-  cellId: string;
-  lat: number;
-  lng: number;
-  radius: number;
-  level: number;
-}
-
-export interface GridStats {
-  level: number;
-  total: number;
-  processed: number;
-}
-
-export interface CellProgress {
-  currentPage: number;
-  nextPageToken?: string | null;
-  totalResults: number;
-}
+import {
+  BoundsResult,
+  CellProgress,
+  GridStats,
+  GridCell,
+  ContainsResult,
+} from "../types";
 
 export class TurfGridManager {
   private static readonly MAX_LEVEL = 8;
-  private static readonly MIN_RADIUS = 100; // 100m minimum
-  private static readonly INITIAL_RADIUS = 50000; // 50km initial radius
+  private static readonly MIN_RADIUS = 100;
+  private static readonly INITIAL_RADIUS = 50000;
+  private germanyBounds: [number, number, number, number] | null = null;
 
-  /**
-   * Initialize grid covering Germany using regular spacing
-   */
-  async initializeGermanyGrid(): Promise<void> {
-    // Get Germany bounds from Natural Earth using Drizzle
-    const germanyBounds = await naturalEarthDb
-      .select({
-        minLng: sql<number>`MIN(${ne10MAdmin0Countries.labelX})`,
-        maxLng: sql<number>`MAX(${ne10MAdmin0Countries.labelX})`,
-        minLat: sql<number>`MIN(${ne10MAdmin0Countries.labelY})`,
-        maxLat: sql<number>`MAX(${ne10MAdmin0Countries.labelY})`,
-      })
-      .from(ne10MAdmin0Countries)
-      .where(eq(ne10MAdmin0Countries.isoA3, "DEU"));
-
-    if (!germanyBounds[0]) {
-      throw new Error("Germany boundaries not found");
+  private async loadGermanyBounds(): Promise<[number, number, number, number]> {
+    if (this.germanyBounds) {
+      return this.germanyBounds;
     }
 
-    const bounds = germanyBounds[0];
+    try {
+      const result = (await naturalEarthDb.all(
+        sql`SELECT ST_XMin(geometry) as minLng, ST_YMin(geometry) as minLat, 
+            ST_XMax(geometry) as maxLng, ST_YMax(geometry) as maxLat 
+            FROM ${ne10MAdmin0Countries} WHERE ${ne10MAdmin0Countries.isoA3} = 'DEU'`
+      )) as BoundsResult[];
 
-    // Create bounding box
-    const bbox: [number, number, number, number] = [
-      bounds.minLng,
-      bounds.minLat,
-      bounds.maxLng,
-      bounds.maxLat,
-    ];
+      if (result[0]) {
+        this.germanyBounds = [
+          result[0].minLng,
+          result[0].minLat,
+          result[0].maxLng,
+          result[0].maxLat,
+        ];
+        return this.germanyBounds;
+      }
+    } catch (error) {
+      console.log("Spatial functions not available, using static bounds");
+    }
 
-    // Generate grid points with 50km spacing for initial coverage
-    const spacing = 50; // kilometers
+    this.germanyBounds = [5.8663, 47.2701, 15.0419, 55.0581];
+    return this.germanyBounds;
+  }
+
+  async initializeGermanyGrid(): Promise<void> {
+    const bbox = await this.loadGermanyBounds();
+
+    const spacing = 50;
     const points = turf.pointGrid(bbox, spacing, { units: "kilometers" });
 
-    const gridCells: Array<{
-      cellId: string;
-      latitude: string;
-      longitude: string;
-      radius: number;
-      level: number;
-    }> = [];
-
+    const gridCells = [];
     let cellIndex = 0;
+
     for (const point of points.features) {
       const [lng, lat] = point.geometry.coordinates;
 
-      // Check if point is within Germany
       if (await this.isPointInGermany(lat!, lng!)) {
         gridCells.push({
           cellId: `cell_${cellIndex++}_level_0`,
@@ -89,9 +69,6 @@ export class TurfGridManager {
       }
     }
 
-    console.log(`Generated ${gridCells.length} initial grid cells`);
-
-    // Insert in batches
     for (let i = 0; i < gridCells.length; i += 100) {
       const batch = gridCells.slice(i, i + 100);
       await db.insert(gridCellSchema).values(batch).onConflictDoNothing();
@@ -100,9 +77,6 @@ export class TurfGridManager {
     console.log(`Inserted ${gridCells.length} grid cells`);
   }
 
-  /**
-   * Get cell progress
-   */
   async getCellProgress(cellId: string): Promise<CellProgress | null> {
     const [cell] = await db
       .select({
@@ -123,9 +97,6 @@ export class TurfGridManager {
     };
   }
 
-  /**
-   * Update cell progress
-   */
   async updateCellProgress(
     cellId: string,
     currentPage: number,
@@ -144,9 +115,6 @@ export class TurfGridManager {
       .where(eq(gridCellSchema.cellId, cellId));
   }
 
-  /**
-   * Get grid statistics
-   */
   async getGridStats(): Promise<GridStats[]> {
     const stats = await db
       .select({
@@ -161,9 +129,6 @@ export class TurfGridManager {
     return stats;
   }
 
-  /**
-   * Get next unprocessed cell
-   */
   async getNextUnprocessedCell(): Promise<GridCell | null> {
     const [cell] = await db
       .select()
@@ -186,9 +151,6 @@ export class TurfGridManager {
     };
   }
 
-  /**
-   * Subdivide a cell by creating 4 smaller cells in a 2x2 grid pattern
-   */
   async subdivideCell(parentCellId: string): Promise<void> {
     const [parentCell] = await db
       .select()
@@ -208,23 +170,20 @@ export class TurfGridManager {
       newLevel > TurfGridManager.MAX_LEVEL ||
       newRadius < TurfGridManager.MIN_RADIUS
     ) {
-      console.log(`Cannot subdivide ${parentCellId} further - removing cell`);
       await this.removeExhaustedCell(parentCellId);
       return;
     }
 
     const centerLat = parseFloat(parentCell.latitude);
     const centerLng = parseFloat(parentCell.longitude);
-
-    // Create 4 circles with optimal spacing to minimize gaps
-    const spacing = (newRadius * 0.9) / 1000; // 90% of radius for better coverage
+    const spacing = (newRadius * 0.9) / 1000;
     const center = turf.point([centerLng, centerLat]);
 
     const childCells = [
-      turf.destination(center, spacing, 45), // Northeast
-      turf.destination(center, spacing, 135), // Southeast
-      turf.destination(center, spacing, 225), // Southwest
-      turf.destination(center, spacing, 315), // Northwest
+      turf.destination(center, spacing, 45),
+      turf.destination(center, spacing, 135),
+      turf.destination(center, spacing, 225),
+      turf.destination(center, spacing, 315),
     ];
 
     const validChildren = [];
@@ -251,51 +210,35 @@ export class TurfGridManager {
       };
     });
 
-    // Insert children
     await db
       .insert(gridCellSchema)
       .values(childGridCells)
       .onConflictDoNothing();
-
-    // Remove parent
     await db
       .delete(gridCellSchema)
       .where(eq(gridCellSchema.cellId, parentCellId));
-
-    console.log(
-      `Subdivided ${parentCellId} into ${validChildren.length} children with ${newRadius}m radius`
-    );
   }
 
-  /**
-   * Remove exhausted cell completely from the database
-   */
   async removeExhaustedCell(cellId: string): Promise<void> {
     await db.delete(gridCellSchema).where(eq(gridCellSchema.cellId, cellId));
-
-    console.log(`Removed exhausted cell: ${cellId}`);
   }
 
   private async isPointInGermany(lat: number, lng: number): Promise<boolean> {
-    const nearbyPlaces = await naturalEarthDb
-      .select({
-        count: sql<number>`COUNT(*)`,
-      })
-      .from(ne10MPopulatedPlaces)
-      .where(
-        and(
-          eq(ne10MPopulatedPlaces.isoA2, "DE"),
-          sql`${ne10MPopulatedPlaces.latitude} BETWEEN ${lat - 0.5} AND ${
-            lat + 0.5
-          }`,
-          sql`${ne10MPopulatedPlaces.longitude} BETWEEN ${lng - 0.5} AND ${
-            lng + 0.5
-          }`
-        )
-      )
-      .limit(1);
-
-    return (nearbyPlaces[0]?.count ?? 0) > 0;
+    try {
+      const result = (await naturalEarthDb.all(
+        sql`SELECT ST_Contains(geometry, ST_Point(${lng}, ${lat})) as contains 
+            FROM ${ne10MAdmin0Countries} WHERE ${ne10MAdmin0Countries.isoA3} = 'DEU'`
+      )) as ContainsResult[];
+      return result[0]?.contains === 1;
+    } catch (error) {
+      const bounds = await this.loadGermanyBounds();
+      return (
+        lat >= bounds[1] &&
+        lat <= bounds[3] &&
+        lng >= bounds[0] &&
+        lng <= bounds[2]
+      );
+    }
   }
 
   async markCellExhausted(cellId: string): Promise<void> {
