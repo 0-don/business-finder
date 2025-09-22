@@ -31,7 +31,7 @@ CREATE TABLE "countries" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"iso_a3" text NOT NULL,
-	"geometry" "geography(MultiPolygon, 4326)" NOT NULL,
+	"geometry" geometry(point) NOT NULL,
 	CONSTRAINT "countries_iso_a3_unique" UNIQUE("iso_a3")
 );
 --> statement-breakpoint
@@ -56,7 +56,7 @@ CREATE TABLE "states_provinces" (
 	"name" text NOT NULL,
 	"country_id" integer NOT NULL,
 	"iso_3166_2" text NOT NULL,
-	"geometry" "geography(MultiPolygon, 4326)" NOT NULL,
+	"geometry" geometry(point) NOT NULL,
 	CONSTRAINT "states_provinces_iso_3166_2_unique" UNIQUE("iso_3166_2")
 );
 --> statement-breakpoint

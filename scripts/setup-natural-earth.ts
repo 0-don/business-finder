@@ -1,40 +1,54 @@
 import { createReadStream, createWriteStream, existsSync } from "fs";
+import { copyFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 
-const NATURAL_EARTH_VECTOR = "natural_earth_vector";
+export const NATURAL_EARTH_VECTOR = "natural_earth_vector";
 
-export async function downloadNaturalEarthDB(): Promise<string> {
+export async function setupNaturalEarth() {
+  const dbPath = `./${NATURAL_EARTH_VECTOR}.sqlite`;
+
+  if (existsSync(dbPath)) {
+    console.log("Natural Earth database already exists");
+    return `file:${dbPath}`;
+  }
+
+  const url = `https://naciscdn.org/naturalearth/packages/${NATURAL_EARTH_VECTOR}.sqlite.zip`;
+
   const tempDir = tmpdir();
-  const dbPath = join(tempDir, `${NATURAL_EARTH_VECTOR}.sqlite`);
   const zipPath = join(tempDir, `${NATURAL_EARTH_VECTOR}.sqlite.zip`);
 
-  if (existsSync(dbPath)) return `file:${dbPath}`;
-
   console.log("Downloading Natural Earth data...");
-  const url = `https://naciscdn.org/naturalearth/packages/${NATURAL_EARTH_VECTOR}.sqlite.zip`;
+
   const response = await fetch(url);
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
     throw new Error(`Download failed: ${response.statusText}`);
   }
 
-  await pipeline(response.body, createWriteStream(zipPath));
+  const fileStream = createWriteStream(zipPath);
+  await pipeline(response.body!, fileStream);
+
   console.log("Extracting database...");
-  await pipeline(createReadStream(zipPath), Extract({ path: tempDir }));
+
+  const readStream = createReadStream(zipPath);
+  await pipeline(readStream, Extract({ path: tempDir }));
 
   const extractedPath = join(
     tempDir,
     "packages",
     `${NATURAL_EARTH_VECTOR}.sqlite`
   );
-  if (!existsSync(extractedPath))
-    throw new Error("Extracted SQLite file not found.");
-
-  return `file:${extractedPath}`;
+  if (existsSync(extractedPath)) {
+    await copyFile(extractedPath, dbPath);
+    console.log("Natural Earth database ready!");
+    return `file:${dbPath}`;
+  } else {
+    throw new Error("Extracted SQLite file not found in packages/");
+  }
 }
 
 if (import.meta.main) {
-  downloadNaturalEarthDB().then(console.log);
+  setupNaturalEarth().catch(console.error);
 }
