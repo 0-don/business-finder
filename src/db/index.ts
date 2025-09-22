@@ -7,9 +7,9 @@ import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
 import { setupNaturalEarth } from "../../scripts/setup-natural-earth";
+import { toPostGisGeometry } from "../lib/geometry";
 import * as naturalEarthSchema from "./natural-earth-schema/schema";
 import { countries, statesProvinces } from "./schema";
-import { toPostGisGeometry } from "../lib/geometry";
 
 export const db = drizzlePostgres(process.env.DATABASE_URL!);
 export const naturalEarthDb = drizzleLibsql(
@@ -41,10 +41,7 @@ await migrate(db, { migrationsFolder: resolve("drizzle") })
     const countryCount = await db
       .select({ count: sql<number>`count(*)` })
       .from(countries);
-    if (countryCount[0]!.count > 0) {
-      log("Geometry data already exists, skipping seeding");
-      return;
-    }
+    if (countryCount[0]!.count > 0) return;
 
     log("Seeding geometry data...");
     const sqliteDb = createClient({ url: await setupNaturalEarth() });

@@ -1,5 +1,5 @@
 import { Client } from "@googlemaps/google-maps-services-js";
-import { GridManager } from "./turf-grid";
+import { GridManager } from "./grid-manager";
 
 export const CLIENT = new Client();
 export const GRID_MANAGER = new GridManager();
