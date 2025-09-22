@@ -5,10 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "bun run --bun --watch src/index.ts",
-    "view": "bun run --bun --watch src/view.ts",
+    "view": "bun run --bun vite",
     "drizzle": "bun run --bun reset && drizzle-kit generate",
     "reset": "bun --bun ./drizzle/reset-db.ts",
-    "postinstall": "bun setup:natural-earth"
+    "postinstall": "bun run --bun scripts/setup-natural-earth.ts"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
