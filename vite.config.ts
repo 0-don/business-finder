@@ -5,7 +5,7 @@ import { GRID_MANAGER } from "./src/lib/constants.js";
 
 async function getGridData() {
   await GRID_MANAGER.clearGrid();
-  await GRID_MANAGER.initializeGermanyGrid();
+  // await GRID_MANAGER.initializeGermanyGrid();
 
   const cells = await db.select().from(gridCellSchema);
   return cells.map((cell) => ({
@@ -22,13 +22,8 @@ export function injectGridData() {
   return {
     name: "inject-grid-data",
     transformIndexHtml: async (html: string) => {
-      try {
-        const gridData = await getGridData();
-        return html.replace("`{{GRID_DATA}}`", JSON.stringify(gridData));
-      } catch (error) {
-        console.error("Failed to load grid data:", error);
-        return html.replace("{{GRID_DATA}}", "[]");
-      }
+      const gridData = await getGridData();
+      return html.replace("`{{GRID_DATA}}`", JSON.stringify(gridData));
     },
   };
 }
