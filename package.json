@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun run --bun --watch src/index.ts",
-    "viewer": "bun run --bun --watch src/viewer.ts",
+    "view": "bun run --bun --watch src/view.ts",
     "drizzle": "bun run --bun reset && drizzle-kit generate",
     "setup:natural-earth": "bun run --bun scripts/setup-natural-earth.ts",
     "introspect:natural-earth": "bun run setup:natural-earth && drizzle-kit introspect --config=drizzle-natural-earth.config.ts",
