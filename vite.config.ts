@@ -30,7 +30,5 @@ export function injectGridData() {
 
 export default defineConfig({
   plugins: [injectGridData()],
-  server: {
-    port: 3000,
-  },
+  server: { port: 3000 },
 });
