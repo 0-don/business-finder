@@ -1,8 +1,11 @@
 import { createServer } from "http";
 import { db } from "./db";
 import { gridCellSchema } from "./db/schema";
+import { GRID_MANAGER } from "./lib/constants";
 
 async function getGridData() {
+  await db.delete(gridCellSchema);
+  await GRID_MANAGER.initializeGermanyGrid();
   const cells = await db.select().from(gridCellSchema);
   return cells.map((cell) => ({
     id: cell.cellId,
