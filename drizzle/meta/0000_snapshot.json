@@ -1,5 +1,5 @@
 {
-  "id": "7991fb77-9d3b-4f41-bb50-878b3377a5ec",
+  "id": "c695ba74-01b7-491d-906c-0e76b67a9f0a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -239,7 +239,7 @@
         },
         "geometry": {
           "name": "geometry",
-          "type": "geometry(point)",
+          "type": "geometry(MultiPolygon, 4326)",
           "primaryKey": false,
           "notNull": true
         }
@@ -404,7 +404,7 @@
         },
         "geometry": {
           "name": "geometry",
-          "type": "geometry(point)",
+          "type": "geometry(MultiPolygon, 4326)",
           "primaryKey": false,
           "notNull": true
         }

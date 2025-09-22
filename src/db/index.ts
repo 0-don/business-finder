@@ -7,10 +7,10 @@ import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
 import { Geometry } from "wkx";
+import { setupNaturalEarth } from "../../scripts/setup-natural-earth";
 import { GeoJSONGeometry } from "../types";
 import * as naturalEarthSchema from "./natural-earth-schema/schema";
 import { countries, statesProvinces } from "./schema";
-import { setupNaturalEarth } from "../../scripts/setup-natural-earth";
 
 export const db = drizzlePostgres(process.env.DATABASE_URL!);
 
@@ -49,7 +49,8 @@ function toPostGisGeometry(wkbData: Uint8Array | null) {
       geoJson.coordinates = [geoJson.coordinates as number[][][]];
     }
 
-    return sql`ST_GeogFromText(${geometry.toWkt()})`;
+    // Use ST_GeomFromText for geometry type, not ST_GeogFromText
+    return sql`ST_GeomFromText(${geometry.toWkt()}, 4326)`;
   } catch (e) {
     return null;
   }
@@ -77,7 +78,7 @@ try {
 
     // Seed countries
     const countryResult = await sqliteDb.execute(
-      "SELECT name, iso_a3, geometry FROM ne_10m_admin_0_countries"
+      "SELECT name, iso_a3, geometry FROM ne_10m_admin_0_countries WHERE name IS NOT NULL"
     );
     const countryValues = countryResult.rows
       .map((row) => ({
@@ -87,7 +88,7 @@ try {
       }))
       .filter((val) => val.geometry !== null);
 
-    await db.insert(countries).values(countryValues);
+    await db.insert(countries).values(countryValues).onConflictDoNothing();
 
     // Seed states/provinces
     const allPgCountries = await db
@@ -98,7 +99,7 @@ try {
     );
 
     const stateResult = await sqliteDb.execute(
-      "SELECT name, iso_3166_2, adm0_a3, geometry FROM ne_10m_admin_1_states_provinces"
+      "SELECT name, iso_3166_2, adm0_a3, geometry FROM ne_10m_admin_1_states_provinces WHERE name IS NOT NULL"
     );
     const stateValues = stateResult.rows
       .map((row) => {
@@ -117,7 +118,7 @@ try {
           val !== null && val.geometry !== null
       );
 
-    await db.insert(statesProvinces).values(stateValues);
+    await db.insert(statesProvinces).values(stateValues).onConflictDoNothing();
     log("Geometry data seeded successfully");
   }
 } catch (err) {

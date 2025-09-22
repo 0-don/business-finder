@@ -1,7 +1,7 @@
 import {
   boolean,
+  customType,
   decimal,
-  geometry,
   integer,
   jsonb,
   pgTable,
@@ -11,14 +11,17 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+const multipolygon = customType<{ data: string }>({
+  dataType() {
+    return "geometry(MultiPolygon, 4326)";
+  },
+});
+
 export const countries = pgTable("countries", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   isoA3: text("iso_a3").notNull().unique(),
-  geometry: geometry("geometry", {
-    type: "multipolygon",
-    srid: 4326,
-  }).notNull(),
+  geometry: multipolygon("geometry").notNull(),
 });
 
 export const statesProvinces = pgTable("states_provinces", {
@@ -28,10 +31,7 @@ export const statesProvinces = pgTable("states_provinces", {
     .notNull()
     .references(() => countries.id),
   iso_3166_2: text("iso_3166_2").notNull().unique(),
-  geometry: geometry("geometry", {
-    type: "multipolygon",
-    srid: 4326,
-  }).notNull(),
+  geometry: multipolygon("geometry").notNull(),
 });
 
 export const businessSchema = pgTable(
