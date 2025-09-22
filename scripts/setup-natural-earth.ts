@@ -5,7 +5,7 @@ import { join } from "path";
 import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 
-const NATURAL_EARTH_VECTOR = "natural_earth_vector";
+export const NATURAL_EARTH_VECTOR = "natural_earth_vector";
 
 export async function setupNaturalEarth() {
   const dbPath = `./${NATURAL_EARTH_VECTOR}.sqlite`;

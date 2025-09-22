@@ -21,15 +21,22 @@ const HTML_TEMPLATE = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Grid Viewer</title>
+  <title>Grid Viewer - Hybrid Theme</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
+    body { margin: 0; background: #1a1a1a; }
     #map { height: 100vh; }
-    .legend { 
-      background: white; 
-      padding: 10px; 
-      border-radius: 5px; 
-      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    .legend {
+       background: rgba(26, 26, 26, 0.9);
+       color: #ffffff;
+       padding: 12px;
+       border-radius: 8px;
+       box-shadow: 0 0 20px rgba(0,0,0,0.5);
+       border: 1px solid #333;
+    }
+    .legend h4 {
+       margin: 0 0 8px 0;
+       color: #ffffff;
     }
   </style>
 </head>
@@ -37,49 +44,85 @@ const HTML_TEMPLATE = `
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map').setView([51.1657, 10.4515], 6); // Germany center
+    const map = L.map('map').setView([51.1657, 10.4515], 6);
     
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+    // Maptiler Hybrid (satellite + labels) theme
+    L.tileLayer('https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=get_your_own_OpIi9ZULNHzrESv6T2vL', {
+      attribution: '© MapTiler © OpenStreetMap contributors',
+      maxZoom: 20
     }).addTo(map);
 
     const gridData = {{GRID_DATA}};
     
-    const colors = ['#ff0000', '#ff7f00', '#ffff00', '#7fff00', '#00ff00', '#00ff7f', '#00ffff', '#007fff', '#0000ff'];
+    // Enhanced colors for better visibility on satellite imagery
+    const colors = [
+      '#ff0040', // Bright red
+      '#ff4000', // Red-orange  
+      '#ff8000', // Orange
+      '#ffbf00', // Yellow-orange
+      '#80ff00', // Bright green
+      '#00ff80', // Green-cyan
+      '#00bfff', // Sky blue
+      '#4080ff', // Blue
+      '#8040ff'  // Purple
+    ];
     
     gridData.forEach(cell => {
-      const color = colors[cell.level] || '#000000';
+      const color = colors[cell.level] || '#ffffff';
       const fillColor = cell.processed ? color : 'transparent';
-      const opacity = cell.processed ? 0.6 : 0.3;
+      const opacity = cell.processed ? 0.7 : 0.4;
+      const weight = 2;
       
       L.circle([cell.lat, cell.lng], {
         radius: cell.radius,
         color: color,
         fillColor: fillColor,
         fillOpacity: opacity,
-        weight: 1
+        weight: weight
       }).bindPopup(\`
-        <b>Cell:</b> \${cell.id}<br>
-        <b>Level:</b> \${cell.level}<br>
-        <b>Radius:</b> \${cell.radius}m<br>
-        <b>Status:</b> \${cell.processed ? 'Processed' : 'Pending'}
-      \`).addTo(map);
+        <div style="background: #1a1a1a; color: #fff; padding: 8px; border-radius: 4px;">
+          <b>Cell:</b> \${cell.id}<br>
+          <b>Level:</b> \${cell.level}<br>
+          <b>Radius:</b> \${cell.radius}m<br>
+          <b>Status:</b> \${cell.processed ? '✅ Processed' : '⏳ Pending'}
+        </div>
+      \`, {
+        className: 'custom-popup'
+      }).addTo(map);
     });
 
-    // Add legend
+    // Dark themed legend
     const legend = L.control({position: 'topright'});
     legend.onAdd = function(map) {
       const div = L.DomUtil.create('div', 'legend');
       div.innerHTML = \`
         <h4>Grid Levels</h4>
-        \${colors.map((color, i) => \`<i style="background:\${color};width:18px;height:18px;display:inline-block;margin-right:8px;"></i> Level \${i}\`).join('<br>')}
-        <br><br>
-        <b>Filled:</b> Processed<br>
-        <b>Empty:</b> Pending
+        \${colors.map((color, i) => 
+          \`<div style="margin: 4px 0;">
+            <span style="background:\${color}; width:16px; height:16px; display:inline-block; margin-right:8px; border-radius:2px; border:1px solid #555;"></span>
+            Level \${i}
+          </div>\`
+        ).join('')}
+        <hr style="border-color: #444; margin: 8px 0;">
+        <div><span style="background:rgba(128,255,0,0.7); width:16px; height:16px; display:inline-block; margin-right:8px; border-radius:2px;"></span> Processed</div>
+        <div><span style="border: 2px solid #80ff00; background:transparent; width:12px; height:12px; display:inline-block; margin-right:8px; border-radius:2px;"></span> Pending</div>
       \`;
       return div;
     };
     legend.addTo(map);
+
+    // Custom popup styling
+    const style = document.createElement('style');
+    style.innerHTML = \`
+      .leaflet-popup-content-wrapper {
+        background: rgba(26, 26, 26, 0.95) !important;
+        border-radius: 8px !important;
+      }
+      .leaflet-popup-tip {
+        background: rgba(26, 26, 26, 0.95) !important;
+      }
+    \`;
+    document.head.appendChild(style);
   </script>
 </body>
 </html>`;
