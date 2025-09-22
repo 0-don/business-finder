@@ -1,4 +1,4 @@
-import { serve } from "bun";
+import { createServer } from "http";
 import { db } from "./db";
 import { gridCellSchema } from "./db/schema";
 
@@ -81,18 +81,24 @@ const HTML_TEMPLATE = `
 </body>
 </html>`;
 
-serve({
-  port: 3000,
-  async fetch(req) {
+const server = createServer(async (req, res) => {
+  try {
     const gridData = await getGridData();
     const html = HTML_TEMPLATE.replace(
       "{{GRID_DATA}}",
       JSON.stringify(gridData)
     );
-    return new Response(html, {
-      headers: { "Content-Type": "text/html" },
-    });
-  },
+
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(html);
+  } catch (error) {
+    console.error("Error serving request:", error);
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Internal Server Error");
+  }
 });
 
-console.log("Grid viewer running at http://localhost:3000");
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(`Grid viewer running at http://localhost:${PORT}`);
+});
