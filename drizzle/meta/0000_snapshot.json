@@ -1,5 +1,5 @@
 {
-  "id": "886f5235-f67b-4ee7-893d-69cf53c820bf",
+  "id": "ec12c693-494b-4eaa-8b14-743ec07fe7c7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -215,6 +215,51 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.countries": {
+      "name": "countries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "iso_a3": {
+          "name": "iso_a3",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "geometry": {
+          "name": "geometry",
+          "type": "geography(MultiPolygon, 4326)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "countries_iso_a3_unique": {
+          "name": "countries_iso_a3_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "iso_a3"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.grid_cell": {
       "name": "grid_cell",
       "schema": "",
@@ -322,6 +367,71 @@
           "nullsNotDistinct": false,
           "columns": [
             "cell_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.states_provinces": {
+      "name": "states_provinces",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "country_id": {
+          "name": "country_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "iso_3166_2": {
+          "name": "iso_3166_2",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "geometry": {
+          "name": "geometry",
+          "type": "geography(MultiPolygon, 4326)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "states_provinces_country_id_countries_id_fk": {
+          "name": "states_provinces_country_id_countries_id_fk",
+          "tableFrom": "states_provinces",
+          "tableTo": "countries",
+          "columnsFrom": [
+            "country_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "states_provinces_iso_3166_2_unique": {
+          "name": "states_provinces_iso_3166_2_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "iso_3166_2"
           ]
         }
       },

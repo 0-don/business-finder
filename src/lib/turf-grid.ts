@@ -6,9 +6,9 @@ import { gridCellSchema } from "../db/schema";
 import {
   BoundsResult,
   CellProgress,
-  ContainsResult,
-  GridCell,
   GridStats,
+  GridCell,
+  ContainsResult,
 } from "../types";
 
 export class TurfGridManager {

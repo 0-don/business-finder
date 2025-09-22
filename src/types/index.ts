@@ -28,3 +28,8 @@ export interface BoundsResult {
 export interface ContainsResult {
   contains: number;
 }
+
+export interface GeoJSONGeometry {
+  type: string;
+  coordinates: number[][][] | number[][][][];
+}

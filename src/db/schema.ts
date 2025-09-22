@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   decimal,
   integer,
   jsonb,
@@ -9,6 +10,29 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+
+const geography = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "geography(MultiPolygon, 4326)";
+  },
+});
+
+export const countries = pgTable("countries", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  isoA3: text("iso_a3").notNull().unique(),
+  geometry: geography("geometry").notNull(),
+});
+
+export const statesProvinces = pgTable("states_provinces", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  countryId: integer("country_id")
+    .notNull()
+    .references(() => countries.id),
+  iso_3166_2: text("iso_3166_2").notNull().unique(),
+  geometry: geography("geometry").notNull(),
+});
 
 export const businessSchema = pgTable(
   "business",
