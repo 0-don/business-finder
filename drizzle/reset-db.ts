@@ -1,5 +1,5 @@
 import "@dotenvx/dotenvx/config";
-import { error, log } from "console";
+import { error } from "console";
 import postgres from "postgres";
 
 // Connect to 'postgres' database instead of your app database
@@ -25,11 +25,14 @@ try {
 
   // Create a new database
   await sql`CREATE DATABASE ${sql(dbName)}`;
+  await sql.end();
 
-  log(`Database ${dbName} has been reset successfully.`);
+  // Now connect to the new database and enable PostGIS
+  const newSql = postgres(process.env.DATABASE_URL, { onnotice: () => {} });
+  await newSql`CREATE EXTENSION IF NOT EXISTS postgis`;
+  await newSql.end();
 } catch (err) {
   error("Error resetting database:", err);
 } finally {
   await sql.end();
-  
 }

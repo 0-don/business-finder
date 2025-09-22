@@ -1,80 +1,64 @@
-import * as turf from "@turf/turf";
 import { count, eq, sql } from "drizzle-orm";
-import { db, naturalEarthDb } from "../db";
-import { ne10MAdmin0Countries } from "../db/natural-earth-schema/schema";
-import { gridCellSchema } from "../db/schema";
-import {
-  BoundsResult,
-  CellProgress,
-  GridStats,
-  GridCell,
-  ContainsResult,
-} from "../types";
+import { db } from "../db";
+import { countries, gridCellSchema } from "../db/schema";
+import { CellProgress, GridCell, GridStats } from "../types";
 
-export class TurfGridManager {
+export class GridManager {
   private static readonly MAX_LEVEL = 8;
   private static readonly MIN_RADIUS = 100;
   private static readonly INITIAL_RADIUS = 50000;
-  private germanyBounds: [number, number, number, number] | null = null;
-
-  private async loadGermanyBounds(): Promise<[number, number, number, number]> {
-    if (this.germanyBounds) {
-      return this.germanyBounds;
-    }
-
-    try {
-      const result = (await naturalEarthDb.all(
-        sql`SELECT ST_XMin(geometry) as minLng, ST_YMin(geometry) as minLat, 
-            ST_XMax(geometry) as maxLng, ST_YMax(geometry) as maxLat 
-            FROM ${ne10MAdmin0Countries} WHERE ${ne10MAdmin0Countries.isoA3} = 'DEU'`
-      )) as BoundsResult[];
-
-      if (result[0]) {
-        this.germanyBounds = [
-          result[0].minLng,
-          result[0].minLat,
-          result[0].maxLng,
-          result[0].maxLat,
-        ];
-        return this.germanyBounds;
-      }
-    } catch (error) {
-      console.log("Spatial functions not available, using static bounds");
-    }
-
-    this.germanyBounds = [5.8663, 47.2701, 15.0419, 55.0581];
-    return this.germanyBounds;
-  }
 
   async initializeGermanyGrid(): Promise<void> {
-    const bbox = await this.loadGermanyBounds();
+    // Get Germany's geometry and bounds using PostGIS
+    const germanyData = await db
+      .select({
+        geometry: countries.geometry,
+        bounds: sql<string>`ST_Extent(geometry)`.as("bounds"),
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, "DEU"))
+      .limit(1);
 
-    const spacing = 50;
-    const points = turf.pointGrid(bbox, spacing, { units: "kilometers" });
-
-    const gridCells = [];
-    let cellIndex = 0;
-
-    for (const point of points.features) {
-      const [lng, lat] = point.geometry.coordinates;
-
-      if (await this.isPointInGermany(lat!, lng!)) {
-        gridCells.push({
-          cellId: `cell_${cellIndex++}_level_0`,
-          latitude: lat!.toString(),
-          longitude: lng!.toString(),
-          radius: TurfGridManager.INITIAL_RADIUS,
-          level: 0,
-        });
-      }
+    if (!germanyData[0]) {
+      throw new Error("Germany geometry not found in database");
     }
 
+    // Create a regular grid using PostGIS ST_SquareGrid
+    const spacing = 50000; // 50km spacing
+    const gridPoints = await db.execute(sql`
+      WITH germany AS (
+        SELECT geometry FROM countries WHERE iso_a3 = 'DEU'
+      ),
+      grid AS (
+        SELECT 
+          ROW_NUMBER() OVER() as grid_id,
+          ST_Centroid(geom) as point
+        FROM germany,
+        LATERAL ST_SquareGrid(${spacing}, geometry) as geom
+      )
+      SELECT 
+        grid_id,
+        ST_X(point) as lng,
+        ST_Y(point) as lat
+      FROM grid
+      WHERE ST_Within(point, (SELECT geometry FROM germany))
+    `) as Array<{grid_id: number; lng: number; lat: number}>;
+
+    const gridCells = gridPoints.map((row: {grid_id: number; lng: number; lat: number}, index: number) => ({
+      cellId: `cell_${index}_level_0`,
+      latitude: row.lat.toString(),
+      longitude: row.lng.toString(),
+      radius: GridManager.INITIAL_RADIUS,
+      level: 0,
+    }));
+
+    // Insert in batches
     for (let i = 0; i < gridCells.length; i += 100) {
       const batch = gridCells.slice(i, i + 100);
       await db.insert(gridCellSchema).values(batch).onConflictDoNothing();
     }
 
-    console.log(`Inserted ${gridCells.length} grid cells`);
+    console.log(`Inserted ${gridCells.length} grid cells using PostGIS`);
   }
 
   async getCellProgress(cellId: string): Promise<CellProgress | null> {
@@ -163,12 +147,12 @@ export class TurfGridManager {
     const newLevel = parentCell.level + 1;
     const newRadius = Math.max(
       Math.floor(parentCell.radius * 0.65),
-      TurfGridManager.MIN_RADIUS
+      GridManager.MIN_RADIUS
     );
 
     if (
-      newLevel > TurfGridManager.MAX_LEVEL ||
-      newRadius < TurfGridManager.MIN_RADIUS
+      newLevel > GridManager.MAX_LEVEL ||
+      newRadius < GridManager.MIN_RADIUS
     ) {
       await this.removeExhaustedCell(parentCellId);
       return;
@@ -176,44 +160,52 @@ export class TurfGridManager {
 
     const centerLat = parseFloat(parentCell.latitude);
     const centerLng = parseFloat(parentCell.longitude);
-    const spacing = (newRadius * 0.9) / 1000;
-    const center = turf.point([centerLng, centerLat]);
 
-    const childCells = [
-      turf.destination(center, spacing, 45),
-      turf.destination(center, spacing, 135),
-      turf.destination(center, spacing, 225),
-      turf.destination(center, spacing, 315),
-    ];
+    // Use PostGIS to generate child points in a more precise pattern
+    const spacing = newRadius * 0.9; // spacing in meters
 
-    const validChildren = [];
-    for (const child of childCells) {
-      const [lng, lat] = child.geometry.coordinates;
-      if (await this.isPointInGermany(lat!, lng!)) {
-        validChildren.push(child);
-      }
-    }
+    const childPoints = await db.execute(sql`
+      WITH center AS (
+        SELECT ST_SetSRID(ST_Point(${centerLng}, ${centerLat}), 4326) as geom
+      ),
+      offsets AS (
+        SELECT * FROM (VALUES 
+          (${spacing}, 45),    -- NE
+          (${spacing}, 135),   -- SE  
+          (${spacing}, 225),   -- SW
+          (${spacing}, 315)    -- NW
+        ) AS t(distance, bearing)
+      ),
+      child_points AS (
+        SELECT 
+          ROW_NUMBER() OVER() as child_index,
+          ST_Project(center.geom::geography, offsets.distance, radians(offsets.bearing))::geometry as point
+        FROM center, offsets
+      )
+      SELECT 
+        child_index,
+        ST_X(point) as lng,
+        ST_Y(point) as lat,
+        ST_Within(point, (SELECT geometry FROM countries WHERE iso_a3 = 'DEU')) as in_germany
+      FROM child_points
+    `) as Array<{child_index: number; lng: number; lat: number; in_germany: boolean}>;
+
+    const validChildren = childPoints
+      .filter((row: {child_index: number; lng: number; lat: number; in_germany: boolean}) => row.in_germany === true)
+      .map((row: {child_index: number; lng: number; lat: number; in_germany: boolean}) => ({
+        cellId: `${parentCellId}_child_${row.child_index}`,
+        latitude: row.lat.toString(),
+        longitude: row.lng.toString(),
+        radius: newRadius,
+        level: newLevel,
+      }));
 
     if (validChildren.length === 0) {
       await this.removeExhaustedCell(parentCellId);
       return;
     }
 
-    const childGridCells = validChildren.map((child, index) => {
-      const [lng, lat] = child.geometry.coordinates;
-      return {
-        cellId: `${parentCellId}_child_${index}`,
-        latitude: lat!.toString(),
-        longitude: lng!.toString(),
-        radius: newRadius,
-        level: newLevel,
-      };
-    });
-
-    await db
-      .insert(gridCellSchema)
-      .values(childGridCells)
-      .onConflictDoNothing();
+    await db.insert(gridCellSchema).values(validChildren).onConflictDoNothing();
     await db
       .delete(gridCellSchema)
       .where(eq(gridCellSchema.cellId, parentCellId));
@@ -223,28 +215,52 @@ export class TurfGridManager {
     await db.delete(gridCellSchema).where(eq(gridCellSchema.cellId, cellId));
   }
 
-  private async isPointInGermany(lat: number, lng: number): Promise<boolean> {
-    try {
-      const result = (await naturalEarthDb.all(
-        sql`SELECT ST_Contains(geometry, ST_Point(${lng}, ${lat})) as contains 
-            FROM ${ne10MAdmin0Countries} WHERE ${ne10MAdmin0Countries.isoA3} = 'DEU'`
-      )) as ContainsResult[];
-      return result[0]?.contains === 1;
-    } catch (error) {
-      const bounds = await this.loadGermanyBounds();
-      return (
-        lat >= bounds[1] &&
-        lat <= bounds[3] &&
-        lng >= bounds[0] &&
-        lng <= bounds[2]
-      );
-    }
-  }
-
   async markCellExhausted(cellId: string): Promise<void> {
     await db
       .update(gridCellSchema)
       .set({ isProcessed: true, updatedAt: new Date() })
       .where(eq(gridCellSchema.cellId, cellId));
+  }
+
+  // Utility method to check if a point is within Germany using PostGIS
+  async isPointInGermany(lat: number, lng: number): Promise<boolean> {
+    const result = await db.execute(sql`
+      SELECT ST_Within(
+        ST_SetSRID(ST_Point(${lng}, ${lat}), 4326),
+        (SELECT geometry FROM countries WHERE iso_a3 = 'DEU')
+      ) as within_germany
+    `) as Array<{within_germany: boolean}>;
+
+    return result[0]?.within_germany === true;
+  }
+
+  // Get grid coverage statistics
+  async getGridCoverage(): Promise<{
+    totalArea: number;
+    gridArea: number;
+    coverage: number;
+  }> {
+    const result = await db.execute(sql`
+      WITH germany AS (
+        SELECT ST_Area(geometry::geography) / 1000000 as area_km2 
+        FROM countries WHERE iso_a3 = 'DEU'
+      ),
+      grid_coverage AS (
+        SELECT COUNT(*) * (PI() * POWER(${GridManager.INITIAL_RADIUS} / 1000.0, 2)) as grid_area_km2
+        FROM grid_cell WHERE level = 0
+      )
+      SELECT 
+        germany.area_km2 as total_area,
+        grid_coverage.grid_area_km2 as grid_area,
+        (grid_coverage.grid_area_km2 / germany.area_km2 * 100) as coverage_percent
+      FROM germany, grid_coverage
+    `) as Array<{total_area: number; grid_area: number; coverage_percent: number}>;
+
+    const row = result[0];
+    return {
+      totalArea: row?.total_area || 0,
+      gridArea: row?.grid_area || 0,
+      coverage: row?.coverage_percent || 0,
+    };
   }
 }
