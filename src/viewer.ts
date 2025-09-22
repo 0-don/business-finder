@@ -1,3 +1,4 @@
+import "@dotenvx/dotenvx/config";
 import { createServer } from "http";
 import { db } from "./db";
 import { gridCellSchema } from "./db/schema";
