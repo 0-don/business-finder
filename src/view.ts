@@ -54,6 +54,53 @@ const HTML_TEMPLATE = `
       maxZoom: 20
     }).addTo(map);
 
+    // Add Germany borders with enhanced visibility for satellite theme
+    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+      .then(response => response.json())
+      .then(data => {
+        const germany = data.features.find(feature => {
+          const name = feature.properties.ADMIN || feature.properties.NAME || feature.properties.name;
+          return name === 'Germany' || name === 'Deutschland';
+        });
+        
+        if (germany) {
+          // Triple layer for maximum visibility on satellite imagery
+          // Outer glow
+          L.geoJSON(germany, {
+            style: {
+              color: '#00ffff',        // Cyan glow
+              weight: 8,
+              opacity: 0.4,
+              fillColor: 'transparent',
+              fillOpacity: 0
+            }
+          }).addTo(map);
+          
+          // Middle layer
+          L.geoJSON(germany, {
+            style: {
+              color: '#ffffff',        // White
+              weight: 5,
+              opacity: 0.8,
+              fillColor: 'transparent',
+              fillOpacity: 0
+            }
+          }).addTo(map);
+          
+          // Main border
+          L.geoJSON(germany, {
+            style: {
+              color: '#ffff00',        // Bright yellow - highly visible on satellite
+              weight: 3,
+              opacity: 1,
+              fillColor: 'transparent',
+              fillOpacity: 0
+            }
+          }).addTo(map);
+        }
+      })
+      .catch(err => console.log('GeoJSON failed:', err));
+
     const gridData = {{GRID_DATA}};
     
     // Enhanced colors for better visibility on satellite imagery
@@ -108,6 +155,7 @@ const HTML_TEMPLATE = `
         <hr style="border-color: #444; margin: 8px 0;">
         <div><span style="background:rgba(128,255,0,0.7); width:16px; height:16px; display:inline-block; margin-right:8px; border-radius:2px;"></span> Processed</div>
         <div><span style="border: 2px solid #80ff00; background:transparent; width:12px; height:12px; display:inline-block; margin-right:8px; border-radius:2px;"></span> Pending</div>
+        <div style="margin-top: 8px;"><span style="border: 3px solid #ffff00; background:transparent; width:12px; height:12px; display:inline-block; margin-right:8px; box-shadow: 0 0 4px #00ffff;"></span> Germany Border</div>
       \`;
       return div;
     };

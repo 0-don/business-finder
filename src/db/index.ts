@@ -3,19 +3,13 @@ import { log } from "console";
 import { getTableColumns, sql } from "drizzle-orm";
 import { drizzle as drizzlePostgres } from "drizzle-orm/bun-sql";
 import { migrate } from "drizzle-orm/bun-sql/migrator";
-import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
 import { setupNaturalEarth } from "../../scripts/setup-natural-earth";
 import { toPostGisGeometry } from "../lib/geometry";
-import * as naturalEarthSchema from "./natural-earth-schema/schema";
 import { countries, statesProvinces } from "./schema";
 
 export const db = drizzlePostgres(process.env.DATABASE_URL!);
-export const naturalEarthDb = drizzleLibsql(
-  createClient({ url: "file:natural_earth_vector.sqlite" }),
-  { schema: naturalEarthSchema }
-);
 
 export function conflictUpdateAllExcept<
   T extends PgTable,
