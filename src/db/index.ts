@@ -6,14 +6,12 @@ import { migrate } from "drizzle-orm/bun-sql/migrator";
 import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { resolve } from "path";
-import { Geometry } from "wkx";
 import { setupNaturalEarth } from "../../scripts/setup-natural-earth";
-import { GeoJSONGeometry } from "../types";
 import * as naturalEarthSchema from "./natural-earth-schema/schema";
 import { countries, statesProvinces } from "./schema";
+import { toPostGisGeometry } from "../lib/geometry";
 
 export const db = drizzlePostgres(process.env.DATABASE_URL!);
-
 export const naturalEarthDb = drizzleLibsql(
   createClient({ url: "file:natural_earth_vector.sqlite" }),
   { schema: naturalEarthSchema }
@@ -27,7 +25,6 @@ export function conflictUpdateAllExcept<
   const updateColumns = Object.entries(columns).filter(
     ([col]) => !except.includes(col as keyof typeof table.$inferInsert)
   );
-
   return updateColumns.reduce(
     (acc, [colName, column]) => ({
       ...acc,
@@ -37,44 +34,20 @@ export function conflictUpdateAllExcept<
   );
 }
 
-function toPostGisGeometry(wkbData: Uint8Array | null) {
-  if (!wkbData) return null;
-  try {
-    const buffer = Buffer.from(wkbData);
-    const geometry = Geometry.parse(buffer);
-    const geoJson = geometry.toGeoJSON() as GeoJSONGeometry;
+await migrate(db, { migrationsFolder: resolve("drizzle") })
+  .then(async () => {
+    log("Database migrated successfully");
 
-    if (geoJson.type === "Polygon") {
-      geoJson.type = "MultiPolygon";
-      geoJson.coordinates = [geoJson.coordinates as number[][][]];
+    const countryCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(countries);
+    if (countryCount[0]!.count > 0) {
+      log("Geometry data already exists, skipping seeding");
+      return;
     }
 
-    // Use ST_GeomFromText for geometry type, not ST_GeogFromText
-    return sql`ST_GeomFromText(${geometry.toWkt()}, 4326)`;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Enable PostGIS first, then run migrations
-try {
-  log("Ensuring PostGIS extension is enabled...");
-  await db.execute(sql`CREATE EXTENSION IF NOT EXISTS postgis`);
-  log("PostGIS extension enabled");
-
-  await migrate(db, { migrationsFolder: resolve("drizzle") });
-  log("Database migrated successfully");
-
-  // Check if geometry data already exists
-  const countryCount = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(countries);
-  if (countryCount[0]!.count > 0) {
-    log("Geometry data already exists, skipping seeding");
-  } else {
     log("Seeding geometry data...");
-    const dbPath = await setupNaturalEarth();
-    const sqliteDb = createClient({ url: dbPath });
+    const sqliteDb = createClient({ url: await setupNaturalEarth() });
 
     // Seed countries
     const countryResult = await sqliteDb.execute(
@@ -86,7 +59,7 @@ try {
         isoA3: row[1] as string,
         geometry: toPostGisGeometry(row[2] as Uint8Array | null)!,
       }))
-      .filter((val) => val.geometry !== null);
+      .filter((val) => val.geometry !== null && val.name?.trim());
 
     await db.insert(countries).values(countryValues).onConflictDoNothing();
 
@@ -104,10 +77,11 @@ try {
     const stateValues = stateResult.rows
       .map((row) => {
         const countryId = countryIsoToIdMap.get(row[2] as string);
-        if (!countryId) return null;
+        const name = row[0] as string;
+        if (!countryId || !name?.trim()) return null;
 
         return {
-          name: row[0] as string,
+          name,
           iso_3166_2: row[1] as string,
           countryId,
           geometry: toPostGisGeometry(row[3] as Uint8Array | null)!,
@@ -120,8 +94,8 @@ try {
 
     await db.insert(statesProvinces).values(stateValues).onConflictDoNothing();
     log("Geometry data seeded successfully");
-  }
-} catch (err) {
-  console.error("Error during migration or seeding:", err);
-  process.exit(1);
-}
+  })
+  .catch((err) => {
+    console.error("Error during migration or seeding:", err);
+    process.exit(1);
+  });
