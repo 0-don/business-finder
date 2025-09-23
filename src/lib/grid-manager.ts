@@ -1,22 +1,22 @@
-// src/lib/grid-manager.ts
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
+import { latSpacing } from "./constants";
 
 export class GridManager {
-  async initializeGermanyGrid(): Promise<void> {
-    console.log("Starting Germany grid initialization...");
+  async initializeCountryGrid(
+    countryCode: string,
+    radius: number = 25000
+  ): Promise<void> {
+    console.log(`Starting ${countryCode} grid initialization...`);
 
-    // Check if Germany exists
-    const germanyExists = await db
+    // Check if country exists
+    const countryExists = await db
       .select({ count: count() })
       .from(countries)
-      .where(eq(countries.isoA3, "DEU"));
+      .where(eq(countries.isoA3, countryCode));
 
-    if (germanyExists[0]?.count === 0)
-      throw new Error("Germany geometry not found in database");
-
-    // Get Germany's bounding box first
+    // Get country's bounding box
     const boundingBox = await db.execute(sql`
       SELECT 
         ST_XMin(geometry) as min_lng,
@@ -24,7 +24,7 @@ export class GridManager {
         ST_XMax(geometry) as max_lng,
         ST_YMax(geometry) as max_lat
       FROM countries 
-      WHERE iso_a3 = 'DEU'
+      WHERE iso_a3 = ${countryCode}
     `);
 
     const bbox = boundingBox[0] as {
@@ -34,63 +34,75 @@ export class GridManager {
       max_lat: number;
     };
 
-    console.log("Germany bounding box:", bbox);
+    console.log(`${countryCode} bounding box:`, bbox);
 
-    // Use sql template literal with proper parameter passing
-    const gridPoints = (await db.execute(sql`
-      WITH grid_coordinates AS (
+    const gridQuery = sql`
+      WITH latitude_series AS (
         SELECT 
-          x as lng,
-          y as lat,
-          ROW_NUMBER() OVER() as grid_id
-        FROM generate_series(
-          ${bbox.min_lng}::numeric, 
-          ${bbox.max_lng}::numeric, 
-          0.7::numeric
-        ) as x
-        CROSS JOIN generate_series(
-          ${bbox.min_lat}::numeric, 
-          ${bbox.max_lat}::numeric, 
-          0.45::numeric
-        ) as y
+          generate_series(
+            ${bbox.min_lat}::numeric,
+            ${bbox.max_lat}::numeric,
+            ${latSpacing(radius)}::numeric
+          ) as lat
       ),
-      germany AS (
-        SELECT geometry FROM countries WHERE iso_a3 = 'DEU'
+      grid_coordinates AS (
+        SELECT 
+          lng_series.lng as lng,
+          ls.lat,
+          row_number() OVER() as grid_id
+        FROM latitude_series ls
+        CROSS JOIN LATERAL generate_series(
+          ${bbox.min_lng}::numeric,
+          ${bbox.max_lng}::numeric,
+          calculate_lng_spacing(ls.lat, ${radius})
+        ) AS lng_series(lng)
+      ),
+      country AS (
+        SELECT geometry FROM countries WHERE iso_a3 = ${countryCode}
       )
       SELECT 
         'grid_' || gc.grid_id as cell_id,
         gc.lng,
         gc.lat
-      FROM grid_coordinates gc, germany g
-      WHERE ST_Within(ST_Point(gc.lng, gc.lat, 4326), g.geometry)
+      FROM grid_coordinates gc, country c
+      WHERE ST_Within(ST_Point(gc.lng, gc.lat, 4326), c.geometry)
       ORDER BY gc.lat, gc.lng
-    `)) as Array<{ cell_id: string; lng: number; lat: number }>;
+    `;
 
-    console.log(`Generated ${gridPoints.length} grid points covering Germany`);
+    const gridPoints = (await db.execute(gridQuery)) as Array<{
+      cell_id: string;
+      lng: number;
+      lat: number;
+    }>;
 
-    if (gridPoints.length === 0) {
-      throw new Error("No grid points generated - check Germany geometry data");
-    }
+    console.log(
+      `Generated ${gridPoints.length} grid points covering ${countryCode}`
+    );
 
-    // Insert grid cells in batches
-    const gridCells = gridPoints.map((row) => ({
-      cellId: row.cell_id,
-      latitude: row.lat.toString(),
-      longitude: row.lng.toString(),
-      radius: 25000,
-      level: 0,
-    }));
-
-    for (let i = 0; i < gridCells.length; i += 100) {
-      const batch = gridCells.slice(i, i + 100);
-      await db.insert(gridCellSchema).values(batch).onConflictDoNothing();
-    }
+    const gridCells = await db
+      .insert(gridCellSchema)
+      .values(
+        gridPoints.map((row) => ({
+          cellId: row.cell_id,
+          latitude: row.lat.toString(),
+          longitude: row.lng.toString(),
+          radius: radius,
+          level: 0,
+        }))
+      )
+      .onConflictDoNothing()
+      .returning();
 
     console.log(`Successfully created ${gridCells.length} grid cells`);
   }
 
+  // Convenience method for Germany
+  async initializeGermanyGrid(): Promise<void> {
+    return this.initializeCountryGrid("DEU", 25000);
+  }
+
   async clearGrid(): Promise<void> {
     console.log("Clearing existing grid cells...");
-    await db.execute(sql`DELETE FROM grid_cell`);
+    await db.delete(gridCellSchema);
   }
 }
