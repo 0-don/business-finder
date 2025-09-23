@@ -4,30 +4,27 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --bun --watch src/index.ts",
-    "view": "bun run --bun vite",
-    "drizzle": "bun run --bun reset && drizzle-kit generate",
-    "reset": "bun --bun ./drizzle/reset-db.ts",
-    "postinstall": "bun run --bun scripts/setup-natural-earth.ts"
+    "dev": "tsx watch src/index.ts",
+    "view": "vite",
+    "drizzle": "npm run reset && drizzle-kit generate",
+    "reset": "tsx ./drizzle/reset-db.ts"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
-    "@libsql/client": "^0.15.15",
-    "@turf/turf": "^7.2.0",
+    "@ngageoint/geopackage": "^4.2.6",
+    "better-sqlite3": "^12.4.1",
     "drizzle-orm": "^0.44.5",
-    "h3-js": "^4.3.0",
     "unzipper": "^0.12.3",
-    "vite-plugin-restart": "^1.0.0",
     "wkx": "^0.5.0"
   },
   "devDependencies": {
-    "@dotenvx/dotenvx": "^1.50.1",
-    "@types/bun": "latest",
+    "@dotenvx/dotenvx": "^1.51.0",
     "@types/node": "latest",
     "@types/unzipper": "^0.10.11",
     "drizzle-kit": "^0.31.4",
     "postgres": "^3.4.7",
     "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
     "vite": "^7.1.7"
   },
   "peerDependencies": {

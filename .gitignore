@@ -38,7 +38,4 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 debug*.json
-natural_earth_vector.sqlite
-natural_earth_vector.sqlite.zip
-**/natural-earth-schema/*
-!**/natural-earth-schema/schema.ts
+gadm_410*

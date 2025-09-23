@@ -1,4 +1,3 @@
-// src/lib/grid-manager.ts
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
