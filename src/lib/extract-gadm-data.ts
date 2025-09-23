@@ -1,10 +1,10 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
+import { sql } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync } from "fs";
 import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries } from "../db/schema";
-import { toPostGisGeometry } from "./geometry";
 
 export async function extractGADMData() {
   const zipPath = "./gadm_410-gpkg.zip";
@@ -44,7 +44,9 @@ export async function extractGADMData() {
 
   console.log("Feature tables found:", featureTables);
   // Process countries (ADM_0)
-  const countryTable = featureTables.find((t: string) => t.includes("ADM_0"));
+  const countryTable = featureTables.find((t: string) =>
+    t.includes("gadm_410")
+  );
   if (!countryTable) throw new Error("Country table not found");
 
   console.log("Seeding countries...");
@@ -63,30 +65,22 @@ export async function extractGADMData() {
       const iso_a3 = props.GID_0 as string;
 
       if (name && iso_a3) {
-        const wkb = geometry.toWkb();
-        const postGisGeometry = toPostGisGeometry(wkb);
+        try {
+          await db
+            .insert(countries)
+            .values({
+              name: name.trim(),
+              isoA3: iso_a3,
+              geometry: sql`ST_GeomFromText(${geometry.toWkt()}, 4326)`,
+            })
+            .onConflictDoNothing();
 
-        if (postGisGeometry) {
-          try {
-            await db
-              .insert(countries)
-              .values({
-                name: name.trim(),
-                isoA3: iso_a3,
-                geometry: postGisGeometry,
-              })
-              .onConflictDoNothing();
-
-            insertedCount++;
-            if (insertedCount % 10 === 0) {
-              console.log(`Processed ${insertedCount} countries...`);
-            }
-          } catch (error) {
-            console.error(
-              `Failed to insert country ${name} (${iso_a3}):`,
-              error
-            );
+          insertedCount++;
+          if (insertedCount % 10 === 0) {
+            console.log(`Processed ${insertedCount} countries...`);
           }
+        } catch (error) {
+          console.error(`Failed to insert country ${name} (${iso_a3}):`, error);
         }
       }
     }

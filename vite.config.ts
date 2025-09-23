@@ -1,3 +1,4 @@
+import "@dotenvx/dotenvx/config";
 import { defineConfig } from "vite";
 
 export function injectGridData() {
