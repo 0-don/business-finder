@@ -39,3 +39,4 @@ yarn.lock
 pnpm-lock.yaml
 debug*.json
 gadm_410*
+gadm-countries.json

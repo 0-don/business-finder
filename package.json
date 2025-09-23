@@ -7,8 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "view": "vite",
     "drizzle": "npm run reset && drizzle-kit generate",
-    "reset": "tsx ./drizzle/reset-db.ts",
-    "postinstall": "tsx scripts/extract-gadm-data.ts"
+    "reset": "tsx ./drizzle/reset-db.ts"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
