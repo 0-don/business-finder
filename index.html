@@ -40,34 +40,17 @@
         }
 
         const gridData = `{{GRID_DATA}}`;
-        const colors = [
-          "#ff0040",
-          "#ff4000",
-          "#ff8000",
-          "#ffbf00",
-          "#80ff00",
-          "#00ff80",
-          "#00bfff",
-          "#4080ff",
-          "#8040ff",
-        ];
-
-        gridData.forEach((cell) => {
-          const color = colors[cell.level] || "#ffffff";
-          const fillColor = cell.processed ? color : "transparent";
-          const fillOpacity = cell.processed ? 0.7 : 0.4;
-
-          new google.maps.Circle({
-            strokeColor: color,
-            strokeOpacity: 1,
-            strokeWeight: 2,
-            fillColor: fillColor,
-            fillOpacity: fillOpacity,
-            map: map,
-            center: { lat: cell.lat, lng: cell.lng },
-            radius: cell.radius,
-          });
-        });
+        gridData.forEach(
+          (cell) =>
+            new google.maps.Circle({
+              strokeColor: "#ff0040",
+              strokeOpacity: 1,
+              strokeWeight: 2,
+              map: map,
+              center: { lat: cell.lat, lng: cell.lng },
+              radius: cell.radius,
+            })
+        );
       }
 
       window.initMap = initMap;

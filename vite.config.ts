@@ -15,12 +15,9 @@ export function injectGridData() {
 
       const cells = await db.select().from(gridCellSchema);
       const gridData = cells.map((cell) => ({
-        id: cell.cellId,
         lat: parseFloat(cell.latitude),
         lng: parseFloat(cell.longitude),
         radius: cell.radius,
-        level: cell.level,
-        processed: cell.isProcessed,
       }));
 
       const germanyGeometry = await gridManager.getCountryGeometry();
