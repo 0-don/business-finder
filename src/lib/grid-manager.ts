@@ -1,4 +1,3 @@
-// src/lib/grid-manager.ts
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
@@ -6,11 +5,14 @@ import { BoundsResult, GridPoints } from "../types";
 import { latSpacing } from "./geometry";
 
 export class GridManager {
-  async initializeCountryGrid(
-    countryCode: string,
-    radius: number = 25000
-  ): Promise<void> {
-    console.log(`Starting ${countryCode} grid initialization...`);
+  countryCode: string;
+
+  constructor(countryCode: string) {
+    this.countryCode = countryCode;
+  }
+  
+  async initializeCountryGrid(radius: number = 25000): Promise<void> {
+    console.log(`Starting ${this.countryCode} grid initialization...`);
 
     const bbox = (
       await db.execute(sql`
@@ -20,11 +22,11 @@ export class GridManager {
         ST_XMax(geometry) as max_lng,
         ST_YMax(geometry) as max_lat
       FROM countries 
-      WHERE iso_a3 = ${countryCode}
+      WHERE iso_a3 = ${this.countryCode}
     `)
     )[0] as BoundsResult;
 
-    console.log(`${countryCode} bounding box:`, bbox);
+    console.log(`${this.countryCode} bounding box:`, bbox);
 
     const gridQuery = sql`
       WITH latitude_series AS (
@@ -48,7 +50,7 @@ export class GridManager {
         ) AS lng_series(lng)
       ),
       country AS (
-        SELECT geometry FROM countries WHERE iso_a3 = ${countryCode}
+        SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
       )
       SELECT 
         'grid_' || gc.grid_id as cell_id,
@@ -62,7 +64,7 @@ export class GridManager {
     const gridPoints = (await db.execute(gridQuery)) as GridPoints[];
 
     console.log(
-      `Generated ${gridPoints.length} grid points covering ${countryCode}`
+      `Generated ${gridPoints.length} grid points covering ${this.countryCode}`
     );
 
     const gridCells = await db
@@ -80,11 +82,6 @@ export class GridManager {
       .returning();
 
     console.log(`Successfully created ${gridCells.length} grid cells`);
-  }
-
-  // Convenience method for Germany
-  async initializeGermanyGrid(): Promise<void> {
-    return this.initializeCountryGrid("DEU", 25000);
   }
 
   async clearGrid(): Promise<void> {

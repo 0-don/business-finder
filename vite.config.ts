@@ -6,10 +6,12 @@ export function injectGridData() {
     transformIndexHtml: async (html: string) => {
       const { db } = await import("./src/db/index.js");
       const { gridCellSchema } = await import("./src/db/schema.js");
-      const { GRID_MANAGER } = await import("./src/lib/constants.js");
+      const { GridManager } = await import("./src/lib/grid-manager.js");
+
+      const GRID_MANAGER = new GridManager("DEU");
 
       await GRID_MANAGER.clearGrid();
-      await GRID_MANAGER.initializeGermanyGrid();
+      await GRID_MANAGER.initializeCountryGrid();
 
       const cells = await db.select().from(gridCellSchema);
       const gridData = cells.map((cell) => ({
