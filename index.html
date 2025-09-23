@@ -28,16 +28,14 @@
           mapTypeId: google.maps.MapTypeId.HYBRID,
         });
 
-        const germanyGeometry = `{{GEOMETRY}}`;
-        if (germanyGeometry) {
-          map.data.addGeoJson(germanyGeometry);
-          map.data.setStyle({
-            strokeColor: "#ffff00",
-            strokeWeight: 3,
-            strokeOpacity: 1,
-            fillOpacity: 0,
-          });
-        }
+        const geometry = `{{GEOMETRY}}`;
+        map.data.addGeoJson(geometry);
+        map.data.setStyle({
+          strokeColor: "#ffff00",
+          strokeWeight: 3,
+          strokeOpacity: 1,
+          fillOpacity: 0,
+        });
 
         const gridData = `{{GRID_DATA}}`;
         gridData.forEach(

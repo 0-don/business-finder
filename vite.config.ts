@@ -24,7 +24,7 @@ export function injectGridData() {
 
       return html
         .replace("`{{GRID_DATA}}`", JSON.stringify(gridData))
-        .replace("`{{GERMANY_GEOMETRY}}`", JSON.stringify(germanyGeometry))
+        .replace("`{{GEOMETRY}}`", JSON.stringify(germanyGeometry))
         .replace(
           "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
           process.env.GOOGLE_MAPS_JAVASCRIPT_API
