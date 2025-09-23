@@ -1,12 +1,7 @@
-<!-- index.html -->
 <!doctype html>
 <html>
   <head>
     <title>Grid Viewer</title>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
     <style>
       body {
         margin: 0;
@@ -18,54 +13,64 @@
   </head>
   <body>
     <div id="map"></div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-      const map = L.map("map").setView([51.1657, 10.4515], 6);
+      let map;
 
-      L.tileLayer(
-        "https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=get_your_own_OpIi9ZULNHzrESv6T2vL",
-        { maxZoom: 20 }
-      ).addTo(map);
+      function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+          zoom: 6,
+          center: { lat: 51.1657, lng: 10.4515 },
+          mapTypeId: google.maps.MapTypeId.HYBRID,
+        });
 
-      const germanyGeometry = `{{GEOMETRY}}`;
-      if (germanyGeometry) {
-        L.geoJSON(germanyGeometry, {
-          style: {
-            color: "#ffff00",
-            weight: 3,
-            opacity: 1,
-            fillColor: "transparent",
+        const germanyGeometry = `{{GEOMETRY}}`;
+        if (germanyGeometry) {
+          map.data.addGeoJson(germanyGeometry);
+          map.data.setStyle({
+            strokeColor: "#ffff00",
+            strokeWeight: 3,
+            strokeOpacity: 1,
             fillOpacity: 0,
-          },
-        }).addTo(map);
+          });
+        }
+
+        const gridData = `{{GRID_DATA}}`;
+        const colors = [
+          "#ff0040",
+          "#ff4000",
+          "#ff8000",
+          "#ffbf00",
+          "#80ff00",
+          "#00ff80",
+          "#00bfff",
+          "#4080ff",
+          "#8040ff",
+        ];
+
+        gridData.forEach((cell) => {
+          const color = colors[cell.level] || "#ffffff";
+          const fillColor = cell.processed ? color : "transparent";
+          const fillOpacity = cell.processed ? 0.7 : 0.4;
+
+          new google.maps.Circle({
+            strokeColor: color,
+            strokeOpacity: 1,
+            strokeWeight: 2,
+            fillColor: fillColor,
+            fillOpacity: fillOpacity,
+            map: map,
+            center: { lat: cell.lat, lng: cell.lng },
+            radius: cell.radius,
+          });
+        });
       }
 
-      const gridData = `{{GRID_DATA}}`;
-      const colors = [
-        "#ff0040",
-        "#ff4000",
-        "#ff8000",
-        "#ffbf00",
-        "#80ff00",
-        "#00ff80",
-        "#00bfff",
-        "#4080ff",
-        "#8040ff",
-      ];
-
-      gridData.forEach((cell) => {
-        const color = colors[cell.level] || "#ffffff";
-        const fillColor = cell.processed ? color : "transparent";
-        const opacity = cell.processed ? 0.7 : 0.4;
-
-        L.circle([cell.lat, cell.lng], {
-          radius: cell.radius,
-          color: color,
-          fillColor: fillColor,
-          fillOpacity: opacity,
-          weight: 2,
-        }).addTo(map);
-      });
+      window.initMap = initMap;
     </script>
+    <script
+      async
+      defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&callback=initMap"
+    ></script>
   </body>
 </html>
