@@ -2,6 +2,7 @@
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
+import { BoundsResult } from "../types";
 import { latSpacing } from "./geometry";
 
 export class GridManager {
@@ -20,8 +21,8 @@ export class GridManager {
     if (countryExists[0]?.count === 0)
       throw new Error(`Country ${countryCode} geometry not found in database`);
 
-    // Get country's bounding box
-    const boundingBox = await db.execute(sql`
+    const bbox = (
+      await db.execute(sql`
       SELECT 
         ST_XMin(geometry) as min_lng,
         ST_YMin(geometry) as min_lat,
@@ -29,14 +30,8 @@ export class GridManager {
         ST_YMax(geometry) as max_lat
       FROM countries 
       WHERE iso_a3 = ${countryCode}
-    `);
-
-    const bbox = boundingBox[0] as {
-      min_lng: number;
-      min_lat: number;
-      max_lng: number;
-      max_lat: number;
-    };
+    `)
+    )[0] as BoundsResult;
 
     console.log(`${countryCode} bounding box:`, bbox);
 

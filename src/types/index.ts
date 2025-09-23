@@ -19,14 +19,10 @@ export interface CellProgress {
 }
 
 export interface BoundsResult {
-  minLng: number;
-  minLat: number;
-  maxLng: number;
-  maxLat: number;
-}
-
-export interface ContainsResult {
-  contains: number;
+  min_lng: number;
+  min_lat: number;
+  max_lng: number;
+  max_lat: number;
 }
 
 export interface GeoJSONGeometry {
