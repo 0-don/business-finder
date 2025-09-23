@@ -29,7 +29,7 @@ export function injectGridData() {
         .replace("`{{GRID_DATA}}`", JSON.stringify(gridData))
         .replace("`{{GERMANY_GEOMETRY}}`", JSON.stringify(germanyGeometry))
         .replace(
-          "{{GOOGLE_MAPS_API_KEY}}",
+          "{{GOOGLE_MAPS_JAVASRIPT_API}}",
           process.env.GOOGLE_MAPS_JAVASRIPT_API
         );
     },
