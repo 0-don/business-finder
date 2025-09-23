@@ -1,11 +1,9 @@
+// src/lib/grid-manager.ts
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
 
 export class GridManager {
-  private static readonly GRID_SPACING = 50000; // 50km spacing in meters
-  private static readonly CIRCLE_RADIUS = 25000; // 25km radius for circles
-
   async initializeGermanyGrid(): Promise<void> {
     console.log("Starting Germany grid initialization...");
 
@@ -15,11 +13,10 @@ export class GridManager {
       .from(countries)
       .where(eq(countries.isoA3, "DEU"));
 
-    if (germanyExists[0]?.count === 0) {
+    if (germanyExists[0]?.count === 0)
       throw new Error("Germany geometry not found in database");
-    }
 
-    // Get Germany's bounding box
+    // Get Germany's bounding box first
     const boundingBox = await db.execute(sql`
       SELECT 
         ST_XMin(geometry) as min_lng,
@@ -39,13 +36,7 @@ export class GridManager {
 
     console.log("Germany bounding box:", bbox);
 
-    // Calculate grid spacing in degrees
-    const latSpacing = 0.45;
-    const lngSpacing = 0.7;
-
-    console.log(`Using grid spacing: ${latSpacing}° lat, ${lngSpacing}° lng`);
-
-    // Generate complete grid with proper type casting
+    // Use sql template literal with proper parameter passing
     const gridPoints = (await db.execute(sql`
       WITH grid_coordinates AS (
         SELECT 
@@ -55,12 +46,12 @@ export class GridManager {
         FROM generate_series(
           ${bbox.min_lng}::numeric, 
           ${bbox.max_lng}::numeric, 
-          ${lngSpacing}::numeric
+          0.7::numeric
         ) as x
         CROSS JOIN generate_series(
           ${bbox.min_lat}::numeric, 
           ${bbox.max_lat}::numeric, 
-          ${latSpacing}::numeric
+          0.45::numeric
         ) as y
       ),
       germany AS (
@@ -75,34 +66,21 @@ export class GridManager {
       ORDER BY gc.lat, gc.lng
     `)) as Array<{ cell_id: string; lng: number; lat: number }>;
 
-    console.log(
-      `Generated ${gridPoints.length} grid points covering all of Germany`
-    );
+    console.log(`Generated ${gridPoints.length} grid points covering Germany`);
 
     if (gridPoints.length === 0) {
       throw new Error("No grid points generated - check Germany geometry data");
     }
 
-    // Show coverage info
-    const lats = gridPoints.map((p) => p.lat);
-    const lngs = gridPoints.map((p) => p.lng);
-    console.log(
-      `Coverage: Lat ${Math.min(...lats).toFixed(2)} to ${Math.max(...lats).toFixed(2)}`
-    );
-    console.log(
-      `Coverage: Lng ${Math.min(...lngs).toFixed(2)} to ${Math.max(...lngs).toFixed(2)}`
-    );
-
-    // Convert to grid cells format
+    // Insert grid cells in batches
     const gridCells = gridPoints.map((row) => ({
       cellId: row.cell_id,
       latitude: row.lat.toString(),
       longitude: row.lng.toString(),
-      radius: GridManager.CIRCLE_RADIUS,
+      radius: 25000,
       level: 0,
     }));
 
-    // Insert in batches
     for (let i = 0; i < gridCells.length; i += 100) {
       const batch = gridCells.slice(i, i + 100);
       await db.insert(gridCellSchema).values(batch).onConflictDoNothing();
@@ -113,6 +91,6 @@ export class GridManager {
 
   async clearGrid(): Promise<void> {
     console.log("Clearing existing grid cells...");
-    await db.delete(gridCellSchema);
+    await db.execute(sql`DELETE FROM grid_cell`);
   }
 }
