@@ -20,11 +20,11 @@ export function injectGridData() {
         radius: cell.radius,
       }));
 
-      const germanyGeometry = await gridManager.getCountryGeometry();
+      const geometry = await gridManager.getCountryGeometry();
 
       return html
         .replace("`{{GRID_DATA}}`", JSON.stringify(gridData))
-        .replace("`{{GEOMETRY}}`", JSON.stringify(germanyGeometry))
+        .replace("`{{GEOMETRY}}`", JSON.stringify(geometry))
         .replace(
           "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
           process.env.GOOGLE_MAPS_JAVASCRIPT_API

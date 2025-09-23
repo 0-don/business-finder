@@ -28,7 +28,16 @@
           mapTypeId: google.maps.MapTypeId.HYBRID,
         });
 
-        const geometry = `{{GEOMETRY}}`;
+        const geometry = {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: `{{GEOMETRY}}`,
+            },
+          ],
+        };
         map.data.addGeoJson(geometry);
         map.data.setStyle({
           strokeColor: "#ffff00",
