@@ -24,7 +24,7 @@ export class GridManager {
       FROM countries 
       WHERE iso_a3 = ${this.countryCode}
     `)
-    )[0] as BoundsResult;
+    )[0] as unknown as BoundsResult;
 
     console.log(`${this.countryCode} bounding box:`, bbox);
 
@@ -61,7 +61,7 @@ export class GridManager {
       ORDER BY gc.lat, gc.lng
     `;
 
-    const gridPoints = (await db.execute(gridQuery)) as GridPoints[];
+    const gridPoints = (await db.execute(gridQuery)) as unknown as GridPoints[];
 
     console.log(
       `Generated ${gridPoints.length} grid points covering ${this.countryCode}`
