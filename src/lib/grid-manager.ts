@@ -1,7 +1,8 @@
+// src/lib/grid-manager.ts
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
-import { latSpacing } from "./constants";
+import { latSpacing } from "./geometry";
 
 export class GridManager {
   async initializeCountryGrid(
@@ -15,6 +16,9 @@ export class GridManager {
       .select({ count: count() })
       .from(countries)
       .where(eq(countries.isoA3, countryCode));
+
+    if (countryExists[0]?.count === 0)
+      throw new Error(`Country ${countryCode} geometry not found in database`);
 
     // Get country's bounding box
     const boundingBox = await db.execute(sql`
@@ -78,6 +82,12 @@ export class GridManager {
     console.log(
       `Generated ${gridPoints.length} grid points covering ${countryCode}`
     );
+
+    if (gridPoints.length === 0) {
+      throw new Error(
+        `No grid points generated - check ${countryCode} geometry data`
+      );
+    }
 
     const gridCells = await db
       .insert(gridCellSchema)

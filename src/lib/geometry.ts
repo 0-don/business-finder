@@ -18,3 +18,5 @@ export function toPostGisGeometry(wkbData: Uint8Array | null) {
     return null;
   }
 }
+
+export const latSpacing = (radius: number) => (radius * 2 * 360.0) / 40008000.0;
