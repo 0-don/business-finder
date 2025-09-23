@@ -1,8 +1,8 @@
 // src/lib/grid-manager.ts
-import { count, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "../db";
-import { countries, gridCellSchema } from "../db/schema";
-import { BoundsResult } from "../types";
+import { gridCellSchema } from "../db/schema";
+import { BoundsResult, GridPoints } from "../types";
 import { latSpacing } from "./geometry";
 
 export class GridManager {
@@ -11,15 +11,6 @@ export class GridManager {
     radius: number = 25000
   ): Promise<void> {
     console.log(`Starting ${countryCode} grid initialization...`);
-
-    // Check if country exists
-    const countryExists = await db
-      .select({ count: count() })
-      .from(countries)
-      .where(eq(countries.isoA3, countryCode));
-
-    if (countryExists[0]?.count === 0)
-      throw new Error(`Country ${countryCode} geometry not found in database`);
 
     const bbox = (
       await db.execute(sql`
@@ -68,21 +59,11 @@ export class GridManager {
       ORDER BY gc.lat, gc.lng
     `;
 
-    const gridPoints = (await db.execute(gridQuery)) as Array<{
-      cell_id: string;
-      lng: number;
-      lat: number;
-    }>;
+    const gridPoints = (await db.execute(gridQuery)) as GridPoints[];
 
     console.log(
       `Generated ${gridPoints.length} grid points covering ${countryCode}`
     );
-
-    if (gridPoints.length === 0) {
-      throw new Error(
-        `No grid points generated - check ${countryCode} geometry data`
-      );
-    }
 
     const gridCells = await db
       .insert(gridCellSchema)
