@@ -3,9 +3,12 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { resolve } from "path";
+import postgres from "postgres";
 import { extractGADMData } from "../lib/extract-gadm-data";
 
-export const db = drizzlePostgres(process.env.DATABASE_URL!);
+export const db = drizzlePostgres(
+  postgres(process.env.DATABASE_URL, { onnotice: () => {} })
+);
 
 export function conflictUpdateAllExcept<
   T extends PgTable,
