@@ -1,3 +1,4 @@
+// src/lib/grid-manager.ts
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
@@ -10,7 +11,7 @@ export class GridManager {
   constructor(countryCode: string) {
     this.countryCode = countryCode;
   }
-  
+
   async initializeCountryGrid(radius: number = 25000): Promise<void> {
     console.log(`Starting ${this.countryCode} grid initialization...`);
 
@@ -82,6 +83,16 @@ export class GridManager {
       .returning();
 
     console.log(`Successfully created ${gridCells.length} grid cells`);
+  }
+
+  async getCountryGeometry() {
+    const result = await db.execute(sql`
+      SELECT ST_AsGeoJSON(geometry) as geojson 
+      FROM countries 
+      WHERE iso_a3 = ${this.countryCode}
+    `);
+
+    return result[0]?.geojson ? JSON.parse(result[0].geojson as string) : null;
   }
 
   async clearGrid(): Promise<void> {

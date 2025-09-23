@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!doctype html>
 <html>
   <head>
@@ -26,34 +27,19 @@
         { maxZoom: 20 }
       ).addTo(map);
 
-      // Germany border
-      fetch(
-        "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson"
-      )
-        .then((response) => response.json())
-        .then((data) => {
-          const germany = data.features.find((feature) => {
-            const name =
-              feature.properties.ADMIN ||
-              feature.properties.NAME ||
-              feature.properties.name;
-            return name === "Germany" || name === "Deutschland";
-          });
+      const germanyGeometry = `{{GEOMETRY}}`;
+      if (germanyGeometry) {
+        L.geoJSON(germanyGeometry, {
+          style: {
+            color: "#ffff00",
+            weight: 3,
+            opacity: 1,
+            fillColor: "transparent",
+            fillOpacity: 0,
+          },
+        }).addTo(map);
+      }
 
-          if (germany) {
-            L.geoJSON(germany, {
-              style: {
-                color: "#ffff00",
-                weight: 3,
-                opacity: 1,
-                fillColor: "transparent",
-                fillOpacity: 0,
-              },
-            }).addTo(map);
-          }
-        });
-
-      // Use injected grid data
       const gridData = `{{GRID_DATA}}`;
       const colors = [
         "#ff0040",

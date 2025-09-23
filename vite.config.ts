@@ -8,10 +8,10 @@ export function injectGridData() {
       const { gridCellSchema } = await import("./src/db/schema.js");
       const { GridManager } = await import("./src/lib/grid-manager.js");
 
-      const GRID_MANAGER = new GridManager("DEU");
+      const gridManager = new GridManager("DEU");
 
-      await GRID_MANAGER.clearGrid();
-      await GRID_MANAGER.initializeCountryGrid();
+      await gridManager.clearGrid();
+      await gridManager.initializeCountryGrid();
 
       const cells = await db.select().from(gridCellSchema);
       const gridData = cells.map((cell) => ({
@@ -23,11 +23,14 @@ export function injectGridData() {
         processed: cell.isProcessed,
       }));
 
-      return html.replace("`{{GRID_DATA}}`", JSON.stringify(gridData));
+      const germanyGeometry = await gridManager.getCountryGeometry();
+
+      return html
+        .replace("`{{GRID_DATA}}`", JSON.stringify(gridData))
+        .replace("`{{GEOMETRY}}`", JSON.stringify(germanyGeometry));
     },
   };
 }
-
 export default defineConfig({
   plugins: [injectGridData()],
   server: {
