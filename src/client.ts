@@ -45,7 +45,7 @@ export async function getPlaceDetails(placeId: string) {
           "utc_offset",
         ],
         language: Language.de,
-        key: process.env.GOOGLE_MAPS_API_KEY!,
+        key: process.env.GOOGLE_PLACES_API!,
       },
     });
     return response.data.result;
@@ -70,7 +70,7 @@ export async function getPlacesNearby(
         keyword:
           "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
         language: Language.de,
-        key: process.env.GOOGLE_MAPS_API_KEY!,
+        key: process.env.GOOGLE_PLACES_API!,
         ...(nextPageToken && { pagetoken: nextPageToken }),
       },
     });

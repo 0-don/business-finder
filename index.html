@@ -2,12 +2,17 @@
 <html>
   <head>
     <title>Grid Viewer</title>
+    <meta name="viewport" content="initial-scale=1.0" />
+    <meta charset="utf-8" />
     <style>
-      body {
-        margin: 0;
-      }
       #map {
-        height: 100vh;
+        height: 100%;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
       }
     </style>
   </head>
@@ -18,8 +23,8 @@
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
-          zoom: 6,
           center: { lat: 51.1657, lng: 10.4515 },
+          zoom: 6,
           mapTypeId: google.maps.MapTypeId.HYBRID,
         });
 
@@ -70,7 +75,7 @@
     <script
       async
       defer
-      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&callback=initMap"
+      src="https://maps.googleapis.com/maps/api/js?key={{GOOGLE_MAPS_JAVASRIPT_API}}&callback=initMap"
     ></script>
   </body>
 </html>

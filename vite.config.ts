@@ -27,7 +27,11 @@ export function injectGridData() {
 
       return html
         .replace("`{{GRID_DATA}}`", JSON.stringify(gridData))
-        .replace("`{{GEOMETRY}}`", JSON.stringify(germanyGeometry));
+        .replace("`{{GERMANY_GEOMETRY}}`", JSON.stringify(germanyGeometry))
+        .replace(
+          "{{GOOGLE_MAPS_API_KEY}}",
+          process.env.GOOGLE_MAPS_JAVASRIPT_API
+        );
     },
   };
 }
