@@ -1,7 +1,6 @@
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
-import { GridCell, GridStats } from "../types";
 
 export class GridManager {
   private static readonly GRID_SPACING = 50000; // 50km spacing in meters
@@ -47,7 +46,7 @@ export class GridManager {
     console.log(`Using grid spacing: ${latSpacing}° lat, ${lngSpacing}° lng`);
 
     // Generate complete grid with proper type casting
-    const gridPoints = await db.execute(sql`
+    const gridPoints = (await db.execute(sql`
       WITH grid_coordinates AS (
         SELECT 
           x as lng,
@@ -74,19 +73,25 @@ export class GridManager {
       FROM grid_coordinates gc, germany g
       WHERE ST_Within(ST_Point(gc.lng, gc.lat, 4326), g.geometry)
       ORDER BY gc.lat, gc.lng
-    `) as Array<{ cell_id: string; lng: number; lat: number }>;
+    `)) as Array<{ cell_id: string; lng: number; lat: number }>;
 
-    console.log(`Generated ${gridPoints.length} grid points covering all of Germany`);
-    
+    console.log(
+      `Generated ${gridPoints.length} grid points covering all of Germany`
+    );
+
     if (gridPoints.length === 0) {
       throw new Error("No grid points generated - check Germany geometry data");
     }
 
     // Show coverage info
-    const lats = gridPoints.map(p => p.lat);
-    const lngs = gridPoints.map(p => p.lng);
-    console.log(`Coverage: Lat ${Math.min(...lats).toFixed(2)} to ${Math.max(...lats).toFixed(2)}`);
-    console.log(`Coverage: Lng ${Math.min(...lngs).toFixed(2)} to ${Math.max(...lngs).toFixed(2)}`);
+    const lats = gridPoints.map((p) => p.lat);
+    const lngs = gridPoints.map((p) => p.lng);
+    console.log(
+      `Coverage: Lat ${Math.min(...lats).toFixed(2)} to ${Math.max(...lats).toFixed(2)}`
+    );
+    console.log(
+      `Coverage: Lng ${Math.min(...lngs).toFixed(2)} to ${Math.max(...lngs).toFixed(2)}`
+    );
 
     // Convert to grid cells format
     const gridCells = gridPoints.map((row) => ({
@@ -104,32 +109,6 @@ export class GridManager {
     }
 
     console.log(`Successfully created ${gridCells.length} grid cells`);
-  }
-
-  async getGridStats(): Promise<GridStats[]> {
-    const stats = await db
-      .select({
-        level: gridCellSchema.level,
-        total: count(),
-        processed: sql<number>`count(case when ${gridCellSchema.isProcessed} then 1 end)`,
-      })
-      .from(gridCellSchema)
-      .groupBy(gridCellSchema.level)
-      .orderBy(gridCellSchema.level);
-
-    return stats;
-  }
-
-  async getAllCells(): Promise<GridCell[]> {
-    const cells = await db.select().from(gridCellSchema);
-
-    return cells.map((cell) => ({
-      cellId: cell.cellId,
-      lat: parseFloat(cell.latitude),
-      lng: parseFloat(cell.longitude),
-      radius: cell.radius,
-      level: cell.level,
-    }));
   }
 
   async clearGrid(): Promise<void> {
