@@ -1,7 +1,7 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
 import * as cliProgress from "cli-progress";
 import { SQL, sql } from "drizzle-orm";
-import { createReadStream, createWriteStream, existsSync } from "fs";
+import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
 import { pipeline } from "stream/promises";
 import { Transform } from "stream";
 import { Extract } from "unzipper";
@@ -71,7 +71,38 @@ export async function extractGADMData() {
   // Extract if needed
   if (!existsSync(gpkgPath)) {
     console.log("Extracting GADM data...");
-    await pipeline(createReadStream(zipPath), Extract({ path: "." }));
+    
+    const zipSize = statSync(zipPath).size;
+    let extractedSize = 0;
+
+    const extractBar = new cliProgress.SingleBar(
+      {
+        format: "Extracting: {bar} {percentage}% | {value}/{total} MB",
+        barCompleteChar: "\u2588",
+        barIncompleteChar: "\u2591",
+      },
+      cliProgress.Presets.shades_classic
+    );
+
+    const totalMB = Math.round(zipSize / 1024 / 1024);
+    extractBar.start(totalMB, 0);
+
+    const extractTransform = new Transform({
+      transform(chunk, encoding, callback) {
+        extractedSize += chunk.length;
+        const extractedMB = Math.round(extractedSize / 1024 / 1024);
+        extractBar.update(extractedMB);
+        callback(null, chunk);
+      }
+    });
+
+    await pipeline(
+      createReadStream(zipPath),
+      extractTransform,
+      Extract({ path: "." })
+    );
+
+    extractBar.stop();
   }
 
   const geoPackage = await GeoPackageAPI.open(gpkgPath);
