@@ -12,6 +12,8 @@ type Subdivision = {
   geometry: SQL<unknown>;
 };
 
+const BATCH_SIZE = 100;
+
 export async function extractGADMData() {
   const zipPath = "./gadm_410-gpkg.zip";
   const gpkgPath = "./gadm_410.gpkg";
@@ -39,12 +41,10 @@ export async function extractGADMData() {
     await pipeline(createReadStream(zipPath), Extract({ path: "." }));
   }
 
-  // Process GeoPackage
-  console.log("Processing GeoPackage...");
   const geoPackage = await GeoPackageAPI.open(gpkgPath);
   const featureDao = geoPackage.getFeatureDao("gadm_410");
   const totalRecords = featureDao.count();
-  const batchSize = Math.ceil(totalRecords / 100);
+  const batchSize = Math.ceil(totalRecords / BATCH_SIZE);
 
   let subdivisions: Subdivision[] = [];
   let processedRecords = 0;
