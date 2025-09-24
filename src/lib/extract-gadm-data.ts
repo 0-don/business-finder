@@ -1,5 +1,5 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
-import * as cliProgress from "cli-progress";
+import cliProgress from "cli-progress";
 import { SQL, sql } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
 import { Transform } from "stream";
@@ -105,7 +105,7 @@ async function extractGADMZip(): Promise<void> {
 
 async function seedSubdivisions(): Promise<void> {
   console.log("Seeding subdivisions...");
-  
+
   const geoPackage = await GeoPackageAPI.open(GPKG_PATH);
   const featureDao = geoPackage.getFeatureDao("gadm_410");
   const totalRecords = featureDao.count();
