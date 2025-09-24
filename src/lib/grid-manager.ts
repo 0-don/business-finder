@@ -14,6 +14,18 @@ export class GridManager {
   async initializeCountryGrid(radius: number = 25000): Promise<void> {
     console.log(`Starting ${this.countryCode} grid initialization...`);
 
+    // First check if country exists
+    const countryCheck = await db.execute(sql`
+      SELECT name, iso_a3 FROM countries WHERE iso_a3 = ${this.countryCode}
+    `);
+
+    if (countryCheck.length === 0) {
+      console.error(`Country with code ${this.countryCode} not found`);
+      return;
+    }
+
+    console.log(`Found country: ${countryCheck[0].name}`);
+
     const bbox = (
       await db.execute(sql`
       SELECT 
@@ -57,7 +69,7 @@ export class GridManager {
         gc.lng,
         gc.lat
       FROM grid_coordinates gc, country c
-      WHERE ST_Within(ST_Point(gc.lng, gc.lat, 4326), c.geometry)
+      WHERE ST_Intersects(ST_Point(gc.lng, gc.lat, 4326), c.geometry)
       ORDER BY gc.lat, gc.lng
     `;
 
@@ -66,6 +78,12 @@ export class GridManager {
     console.log(
       `Generated ${gridPoints.length} grid points covering ${this.countryCode}`
     );
+
+    // Check if we have grid points before inserting
+    if (gridPoints.length === 0) {
+      console.error(`No grid points generated for ${this.countryCode}. Check geometry data.`);
+      return;
+    }
 
     const gridCells = await db
       .insert(gridCellSchema)

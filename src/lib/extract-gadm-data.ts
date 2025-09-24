@@ -76,7 +76,7 @@ export async function extractGADMData() {
             .onConflictDoNothing();
 
           insertedCount++;
-          if (insertedCount % 10 === 0) {
+          if (insertedCount % 100 === 0) {
             console.log(`Processed ${insertedCount} countries...`);
           }
         } catch (error) {
