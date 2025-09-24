@@ -1,7 +1,9 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
+import * as cliProgress from "cli-progress";
 import { SQL, sql } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync } from "fs";
 import { pipeline } from "stream/promises";
+import { Transform } from "stream";
 import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
@@ -32,7 +34,38 @@ export async function extractGADMData() {
       "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip"
     );
     if (!response.body) throw new Error("Download failed");
-    await pipeline(response.body, createWriteStream(zipPath));
+
+    const totalSize = parseInt(response.headers.get("content-length") || "0");
+    let downloadedSize = 0;
+
+    const downloadBar = new cliProgress.SingleBar(
+      {
+        format: "Downloading: {bar} {percentage}% | {value}/{total} MB",
+        barCompleteChar: "\u2588",
+        barIncompleteChar: "\u2591",
+      },
+      cliProgress.Presets.shades_classic
+    );
+
+    const totalMB = Math.round(totalSize / 1024 / 1024);
+    downloadBar.start(totalMB, 0);
+
+    const progressTransform = new Transform({
+      transform(chunk, encoding, callback) {
+        downloadedSize += chunk.length;
+        const downloadedMB = Math.round(downloadedSize / 1024 / 1024);
+        downloadBar.update(downloadedMB);
+        callback(null, chunk);
+      }
+    });
+
+    await pipeline(
+      response.body,
+      progressTransform,
+      createWriteStream(zipPath)
+    );
+
+    downloadBar.stop();
   }
 
   // Extract if needed
@@ -48,6 +81,17 @@ export async function extractGADMData() {
 
   let subdivisions: Subdivision[] = [];
   let processedRecords = 0;
+
+  const subdivisionsBar = new cliProgress.SingleBar(
+    {
+      format: "Seeding Subdivisions: {bar} {percentage}% | {value}/{total}",
+      barCompleteChar: "\u2588",
+      barIncompleteChar: "\u2591",
+    },
+    cliProgress.Presets.shades_classic
+  );
+
+  subdivisionsBar.start(totalRecords, 0);
 
   for (const row of featureDao.queryForEach()) {
     const feature = featureDao.getRow(row);
@@ -65,21 +109,17 @@ export async function extractGADMData() {
 
     if (subdivisions.length >= batchSize) {
       await db.insert(gadmSubdivisions).values(subdivisions);
-      const percentage = Math.round((processedRecords / totalRecords) * 100);
-      process.stdout.write(
-        `\rSeeding Subdivisions: ${percentage}% (${processedRecords}/${totalRecords})`
-      );
+      subdivisionsBar.update(processedRecords);
       subdivisions = [];
     }
   }
 
   if (subdivisions.length > 0) {
     await db.insert(gadmSubdivisions).values(subdivisions);
-    process.stdout.write(
-      `\rSeeding Subdivisions: 100% (${processedRecords}/${totalRecords})\n`
-    );
+    subdivisionsBar.update(processedRecords);
   }
 
+  subdivisionsBar.stop();
   geoPackage.close();
 
   // Create countries from subdivisions
@@ -91,6 +131,18 @@ export async function extractGADMData() {
     })
     .from(gadmSubdivisions);
 
+  const countriesBar = new cliProgress.SingleBar(
+    {
+      format:
+        "Seeding Countries: {bar} {percentage}% | {value}/{total} | {country}",
+      barCompleteChar: "\u2588",
+      barIncompleteChar: "\u2591",
+    },
+    cliProgress.Presets.shades_classic
+  );
+
+  countriesBar.start(distinctCountries.length, 0, { country: "" });
+
   for (let i = 0; i < distinctCountries.length; i++) {
     const country = distinctCountries[i]!;
 
@@ -100,11 +152,9 @@ export async function extractGADMData() {
       FROM gadm_subdivisions WHERE iso_a3 = ${country.iso_a3}
     `);
 
-    const percentage = Math.round(((i + 1) / distinctCountries.length) * 100);
-    process.stdout.write(
-      `\rSeeding Countries: ${percentage}% (${i + 1}/${distinctCountries.length}) - ${country.country_name}`
-    );
+    countriesBar.update(i + 1, { country: country.country_name });
   }
 
-  console.log(`\n\nComplete: ${distinctCountries.length} countries created`);
+  countriesBar.stop();
+  console.log(`\nComplete: ${distinctCountries.length} countries created`);
 }
