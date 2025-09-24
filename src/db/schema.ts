@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 const multipolygon = customType<{ data: string }>({
@@ -17,20 +18,27 @@ const multipolygon = customType<{ data: string }>({
   },
 });
 
+export const gadmSubdivisions = pgTable("gadm_subdivisions", {
+  id: serial("id").primaryKey(),
+  countryName: varchar("country_name", { length: 256 }).notNull(),
+  isoA3: varchar("iso_a3", { length: 3 }).notNull(),
+  geometry: multipolygon("geometry").notNull(),
+});
+
 export const countries = pgTable("countries", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  isoA3: text("iso_a3").notNull().unique(),
+  name: varchar("name", { length: 256 }).notNull(),
+  isoA3: varchar("iso_a3", { length: 3 }).notNull().unique(),
   geometry: multipolygon("geometry").notNull(),
 });
 
 export const statesProvinces = pgTable("states_provinces", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
   countryId: integer("country_id")
     .notNull()
     .references(() => countries.id),
-  iso_3166_2: text("iso_3166_2").notNull().unique(),
+  iso_3166_2: varchar("iso_3166_2", { length: 10 }),
   geometry: multipolygon("geometry").notNull(),
 });
 

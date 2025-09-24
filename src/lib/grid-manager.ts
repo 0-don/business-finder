@@ -24,7 +24,7 @@ export class GridManager {
       return;
     }
 
-    console.log(`Found country: ${countryCheck[0].name}`);
+    console.log(`Found country: ${countryCheck[0]?.name}`);
 
     const bbox = (
       await db.execute(sql`

@@ -1,5 +1,5 @@
 {
-  "id": "16280295-7501-4757-a9d1-4004871fea0c",
+  "id": "e479923d-54dd-4a0a-a701-76319f3884d8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -227,13 +227,13 @@
         },
         "name": {
           "name": "name",
-          "type": "text",
+          "type": "varchar(256)",
           "primaryKey": false,
           "notNull": true
         },
         "iso_a3": {
           "name": "iso_a3",
-          "type": "text",
+          "type": "varchar(3)",
           "primaryKey": false,
           "notNull": true
         },
@@ -256,6 +256,43 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.gadm_subdivisions": {
+      "name": "gadm_subdivisions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "country_name": {
+          "name": "country_name",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "iso_a3": {
+          "name": "iso_a3",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "geometry": {
+          "name": "geometry",
+          "type": "geometry(MultiPolygon, 4326)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -386,7 +423,7 @@
         },
         "name": {
           "name": "name",
-          "type": "text",
+          "type": "varchar(256)",
           "primaryKey": false,
           "notNull": true
         },
@@ -398,9 +435,9 @@
         },
         "iso_3166_2": {
           "name": "iso_3166_2",
-          "type": "text",
+          "type": "varchar(10)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "geometry": {
           "name": "geometry",
@@ -426,15 +463,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "states_provinces_iso_3166_2_unique": {
-          "name": "states_provinces_iso_3166_2_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "iso_3166_2"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

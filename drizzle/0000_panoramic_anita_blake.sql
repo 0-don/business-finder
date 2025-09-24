@@ -29,10 +29,17 @@ CREATE TABLE "business" (
 --> statement-breakpoint
 CREATE TABLE "countries" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"iso_a3" text NOT NULL,
+	"name" varchar(256) NOT NULL,
+	"iso_a3" varchar(3) NOT NULL,
 	"geometry" geometry(MultiPolygon, 4326) NOT NULL,
 	CONSTRAINT "countries_iso_a3_unique" UNIQUE("iso_a3")
+);
+--> statement-breakpoint
+CREATE TABLE "gadm_subdivisions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"country_name" varchar(256) NOT NULL,
+	"iso_a3" varchar(3) NOT NULL,
+	"geometry" geometry(MultiPolygon, 4326) NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "grid_cell" (
@@ -53,11 +60,10 @@ CREATE TABLE "grid_cell" (
 --> statement-breakpoint
 CREATE TABLE "states_provinces" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
+	"name" varchar(256) NOT NULL,
 	"country_id" integer NOT NULL,
-	"iso_3166_2" text NOT NULL,
-	"geometry" geometry(MultiPolygon, 4326) NOT NULL,
-	CONSTRAINT "states_provinces_iso_3166_2_unique" UNIQUE("iso_3166_2")
+	"iso_3166_2" varchar(10),
+	"geometry" geometry(MultiPolygon, 4326) NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "states_provinces" ADD CONSTRAINT "states_provinces_country_id_countries_id_fk" FOREIGN KEY ("country_id") REFERENCES "public"."countries"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

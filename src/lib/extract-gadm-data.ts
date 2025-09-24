@@ -4,7 +4,7 @@ import { createReadStream, createWriteStream, existsSync } from "fs";
 import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 import { db } from "../db";
-import { countries } from "../db/schema";
+import { countries, gadmSubdivisions } from "../db/schema";
 
 export async function extractGADMData() {
   const zipPath = "./gadm_410-gpkg.zip";
@@ -26,68 +26,81 @@ export async function extractGADMData() {
 
     if (!response.body) throw new Error("Failed to download");
     await pipeline(response.body, createWriteStream(zipPath));
-  } else {
-    console.log("Using existing GADM zip file");
   }
 
   // Extract if gpkg doesn't exist
   if (!existsSync(gpkgPath)) {
     console.log("Extracting GADM data...");
     await pipeline(createReadStream(zipPath), Extract({ path: "." }));
-  } else {
-    console.log("Using existing GADM GeoPackage");
   }
 
-  console.log("Processing GeoPackage...");
+  console.log("Clearing existing subdivision data...");
+  await db.delete(gadmSubdivisions);
+
+  console.log("Processing GeoPackage and bulk loading subdivisions...");
   const geoPackage = await GeoPackageAPI.open(gpkgPath);
-  const featureTables = geoPackage.getFeatureTables();
+  const featureDao = geoPackage.getFeatureDao("gadm_410");
+  const resultSet = featureDao.queryForEach();
 
-  console.log("Feature tables found:", featureTables);
-  // Process countries (ADM_0)
-  const countryTable = featureTables.find((t: string) =>
-    t.includes("gadm_410")
-  );
-  if (!countryTable) throw new Error("Country table not found");
+  const batchSize = 1000;
+  let subdivisionsToInsert = [];
 
-  console.log("Seeding countries...");
-  const countryDao = geoPackage.getFeatureDao(countryTable);
-  const countryIterator = countryDao.queryForEach();
-
-  let insertedCount = 0;
-
-  for (const row of countryIterator) {
-    const feature = countryDao.getRow(row);
+  for (const row of resultSet) {
+    const feature = featureDao.getRow(row);
     const geometry = feature.geometry?.geometry;
     const props = feature.values;
 
-    if (geometry && props) {
-      const name = (props.COUNTRY || props.NAME_EN) as string;
-      const iso_a3 = props.GID_0 as string;
+    if (!geometry || !props) continue;
 
-      if (name && iso_a3) {
-        try {
-          await db
-            .insert(countries)
-            .values({
-              name: name.trim(),
-              isoA3: iso_a3,
-              geometry: sql`ST_GeomFromText(${geometry.toWkt()}, 4326)`,
-            })
-            .onConflictDoNothing();
+    const iso_a3 = props.GID_0 as string;
+    const countryName = (props.COUNTRY || props.NAME_0) as string;
 
-          insertedCount++;
-          if (insertedCount % 100 === 0) {
-            console.log(`Processed ${insertedCount} countries...`);
-          }
-        } catch (error) {
-          console.error(`Failed to insert country ${name} (${iso_a3}):`, error);
-        }
-      }
+    if (!iso_a3 || !countryName) continue;
+
+    subdivisionsToInsert.push({
+      countryName: countryName.trim(),
+      isoA3: iso_a3,
+      geometry: sql`ST_GeomFromText(${geometry.toWkt()}, 4326)`,
+    });
+
+    // Batch insert for performance
+    if (subdivisionsToInsert.length >= batchSize) {
+      await db.insert(gadmSubdivisions).values(subdivisionsToInsert);
+      console.log(
+        `Inserted batch of ${subdivisionsToInsert.length} subdivisions...`
+      );
+      subdivisionsToInsert = [];
     }
   }
 
-  geoPackage.close();
+  // Insert remaining records
+  if (subdivisionsToInsert.length > 0) {
+    await db.insert(gadmSubdivisions).values(subdivisionsToInsert);
+    console.log(
+      `Inserted final batch of ${subdivisionsToInsert.length} subdivisions`
+    );
+  }
+
+  console.log("Performing PostGIS union to create country boundaries...");
+
+  // Use PostGIS to union all subdivisions by country
+  const unionQuery = sql`
+    INSERT INTO countries (name, iso_a3, geometry)
+    SELECT
+      country_name,
+      iso_a3,
+      ST_Multi(ST_Union(geometry)) as geometry
+    FROM gadm_subdivisions
+    GROUP BY iso_a3, country_name
+  `;
+
+  await db.execute(unionQuery);
+
+  console.log("Cleaning up temporary subdivision data...");
+  await db.delete(gadmSubdivisions);
+
+  const countryCount = await db.select().from(countries);
   console.log(
-    `GADM data processing complete. Inserted ${insertedCount} countries.`
+    `Database seeding complete. Created ${countryCount.length} countries.`
   );
 }
