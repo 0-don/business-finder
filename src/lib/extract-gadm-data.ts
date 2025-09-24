@@ -2,8 +2,8 @@ import { GeoPackageAPI } from "@ngageoint/geopackage";
 import * as cliProgress from "cli-progress";
 import { SQL, sql } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
-import { pipeline } from "stream/promises";
 import { Transform } from "stream";
+import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
@@ -15,97 +15,98 @@ type Subdivision = {
 };
 
 const BATCH_SIZE = 100;
+const ZIP_PATH = "./gadm_410-gpkg.zip";
+const GPKG_PATH = "./gadm_410.gpkg";
+const DOWNLOAD_URL =
+  "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
 
-export async function extractGADMData() {
-  const zipPath = "./gadm_410-gpkg.zip";
-  const gpkgPath = "./gadm_410.gpkg";
-
-  // Check if data exists
+async function checkExistingData(): Promise<boolean> {
   const existingCountries = await db.select().from(countries).limit(1);
   if (existingCountries.length > 0) {
     console.log("GADM data already exists");
-    return;
+    return true;
   }
+  return false;
+}
 
-  // Download if needed
-  if (!existsSync(zipPath)) {
-    console.log("Downloading GADM data...");
-    const response = await fetch(
-      "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip"
-    );
-    if (!response.body) throw new Error("Download failed");
+async function downloadGADMZip(): Promise<void> {
+  if (existsSync(ZIP_PATH)) return;
 
-    const totalSize = parseInt(response.headers.get("content-length") || "0");
-    let downloadedSize = 0;
+  console.log("Downloading GADM data...");
+  const response = await fetch(DOWNLOAD_URL);
+  if (!response.body) throw new Error("Download failed");
 
-    const downloadBar = new cliProgress.SingleBar(
-      {
-        format: "Downloading: {bar} {percentage}% | {value}/{total} MB",
-        barCompleteChar: "\u2588",
-        barIncompleteChar: "\u2591",
-      },
-      cliProgress.Presets.shades_classic
-    );
+  const totalSize = parseInt(response.headers.get("content-length") || "0");
+  let downloadedSize = 0;
 
-    const totalMB = Math.round(totalSize / 1024 / 1024);
-    downloadBar.start(totalMB, 0);
+  const downloadBar = new cliProgress.SingleBar(
+    {
+      format: "Downloading: {bar} {percentage}% | {value}/{total} MB",
+      barCompleteChar: "\u2588",
+      barIncompleteChar: "\u2591",
+    },
+    cliProgress.Presets.shades_classic
+  );
 
-    const progressTransform = new Transform({
-      transform(chunk, encoding, callback) {
-        downloadedSize += chunk.length;
-        const downloadedMB = Math.round(downloadedSize / 1024 / 1024);
-        downloadBar.update(downloadedMB);
-        callback(null, chunk);
-      }
-    });
+  const totalMB = Math.round(totalSize / 1024 / 1024);
+  downloadBar.start(totalMB, 0);
 
-    await pipeline(
-      response.body,
-      progressTransform,
-      createWriteStream(zipPath)
-    );
+  const progressTransform = new Transform({
+    transform(chunk, _, callback) {
+      downloadedSize += chunk.length;
+      const downloadedMB = Math.round(downloadedSize / 1024 / 1024);
+      downloadBar.update(downloadedMB);
+      callback(null, chunk);
+    },
+  });
 
-    downloadBar.stop();
-  }
+  await pipeline(response.body, progressTransform, createWriteStream(ZIP_PATH));
 
-  // Extract if needed
-  if (!existsSync(gpkgPath)) {
-    console.log("Extracting GADM data...");
-    
-    const zipSize = statSync(zipPath).size;
-    let extractedSize = 0;
+  downloadBar.stop();
+}
 
-    const extractBar = new cliProgress.SingleBar(
-      {
-        format: "Extracting: {bar} {percentage}% | {value}/{total} MB",
-        barCompleteChar: "\u2588",
-        barIncompleteChar: "\u2591",
-      },
-      cliProgress.Presets.shades_classic
-    );
+async function extractGADMZip(): Promise<void> {
+  if (existsSync(GPKG_PATH)) return;
 
-    const totalMB = Math.round(zipSize / 1024 / 1024);
-    extractBar.start(totalMB, 0);
+  console.log("Extracting GADM data...");
 
-    const extractTransform = new Transform({
-      transform(chunk, encoding, callback) {
-        extractedSize += chunk.length;
-        const extractedMB = Math.round(extractedSize / 1024 / 1024);
-        extractBar.update(extractedMB);
-        callback(null, chunk);
-      }
-    });
+  const zipSize = statSync(ZIP_PATH).size;
+  let extractedSize = 0;
 
-    await pipeline(
-      createReadStream(zipPath),
-      extractTransform,
-      Extract({ path: "." })
-    );
+  const extractBar = new cliProgress.SingleBar(
+    {
+      format: "Extracting: {bar} {percentage}% | {value}/{total} MB",
+      barCompleteChar: "\u2588",
+      barIncompleteChar: "\u2591",
+    },
+    cliProgress.Presets.shades_classic
+  );
 
-    extractBar.stop();
-  }
+  const totalMB = Math.round(zipSize / 1024 / 1024);
+  extractBar.start(totalMB, 0);
 
-  const geoPackage = await GeoPackageAPI.open(gpkgPath);
+  const extractTransform = new Transform({
+    transform(chunk, _, callback) {
+      extractedSize += chunk.length;
+      const extractedMB = Math.round(extractedSize / 1024 / 1024);
+      extractBar.update(extractedMB);
+      callback(null, chunk);
+    },
+  });
+
+  await pipeline(
+    createReadStream(ZIP_PATH),
+    extractTransform,
+    Extract({ path: "." })
+  );
+
+  extractBar.stop();
+}
+
+async function seedSubdivisions(): Promise<void> {
+  console.log("Seeding subdivisions...");
+  
+  const geoPackage = await GeoPackageAPI.open(GPKG_PATH);
   const featureDao = geoPackage.getFeatureDao("gadm_410");
   const totalRecords = featureDao.count();
   const batchSize = Math.ceil(totalRecords / BATCH_SIZE);
@@ -152,9 +153,11 @@ export async function extractGADMData() {
 
   subdivisionsBar.stop();
   geoPackage.close();
+}
 
-  // Create countries from subdivisions
+async function createCountriesFromSubdivisions(): Promise<void> {
   console.log("Creating countries from subdivisions...");
+
   const distinctCountries = await db
     .selectDistinct({
       iso_a3: gadmSubdivisions.isoA3,
@@ -187,5 +190,13 @@ export async function extractGADMData() {
   }
 
   countriesBar.stop();
-  console.log(`\nComplete: ${distinctCountries.length} countries created`);
+}
+
+export async function extractGADMData(): Promise<void> {
+  if (await checkExistingData()) return;
+
+  await downloadGADMZip();
+  await extractGADMZip();
+  await seedSubdivisions();
+  await createCountriesFromSubdivisions();
 }
