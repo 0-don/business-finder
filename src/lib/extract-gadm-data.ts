@@ -104,7 +104,7 @@ async function extractGADMZip(): Promise<void> {
 }
 
 async function seedSubdivisions(): Promise<void> {
-  console.log("Seeding subdivisions...");
+  console.log("Seeding Subdivisions from GPKG...");
 
   const geoPackage = await GeoPackageAPI.open(GPKG_PATH);
   const featureDao = geoPackage.getFeatureDao("gadm_410");
