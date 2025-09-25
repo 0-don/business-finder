@@ -23,7 +23,6 @@ const DOWNLOAD_URL =
 async function checkExistingData(): Promise<boolean> {
   const existingCountries = await db.select().from(countries).limit(1);
   if (existingCountries.length > 0) {
-    console.log("GADM data already exists");
     return true;
   }
   return false;

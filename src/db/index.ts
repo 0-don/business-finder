@@ -45,7 +45,6 @@ await migrate(db, { migrationsFolder: resolve("drizzle") })
   .then(async () => {
     await createPostgreSQLFunctions();
     await extractGADMData();
-    console.log("Database setup complete");
   })
   .catch((err) => {
     console.error("Error during migration or seeding:", err);

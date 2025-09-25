@@ -11,7 +11,7 @@ export class GridManager {
     this.countryCode = countryCode;
   }
 
-  async initializeCountryGrid(radius: number = 25000): Promise<void> {
+  async initializeCountryGrid(radius: number = 50000): Promise<void> {
     console.log(`Starting ${this.countryCode} grid initialization...`);
 
     // First check if country exists
@@ -74,16 +74,6 @@ export class GridManager {
     `;
 
     const gridPoints = (await db.execute(gridQuery)) as unknown as GridPoints[];
-
-    console.log(
-      `Generated ${gridPoints.length} grid points covering ${this.countryCode}`
-    );
-
-    // Check if we have grid points before inserting
-    if (gridPoints.length === 0) {
-      console.error(`No grid points generated for ${this.countryCode}. Check geometry data.`);
-      return;
-    }
 
     const gridCells = await db
       .insert(gridCellSchema)
