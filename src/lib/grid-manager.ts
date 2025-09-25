@@ -14,7 +14,6 @@ export class GridManager {
   async initializeCountryGrid(radius: number = 50000): Promise<void> {
     console.log(`Starting ${this.countryCode} grid initialization...`);
 
-    // First check if country exists
     const countryCheck = await db.execute(sql`
       SELECT name, iso_a3 FROM countries WHERE iso_a3 = ${this.countryCode}
     `);
@@ -70,6 +69,10 @@ export class GridManager {
         gc.lat
       FROM grid_coordinates gc, country c
       WHERE ST_Intersects(ST_Point(gc.lng, gc.lat, 4326), c.geometry)
+      AND ST_Contains(
+        c.geometry,
+        ST_Buffer(ST_Point(gc.lng, gc.lat, 4326)::geography, ${radius * 0.95})::geometry
+      )
       ORDER BY gc.lat, gc.lng
     `;
 
