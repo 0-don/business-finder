@@ -1,8 +1,11 @@
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
 import { BoundsResult } from "../types";
+
+dayjs.extend(relativeTime);
 
 export class GridManager {
   countryCode: string;
@@ -12,12 +15,11 @@ export class GridManager {
   }
 
   async initializeCountryGrid(initialRadius: number = 50000): Promise<void> {
-    console.log(`Initializing grid for ${this.countryCode}...`);
     const startTime = dayjs();
+    console.log(`Initializing grid for ${this.countryCode}...`);
 
     const bounds = await this.getCountryBounds();
 
-    // Pre-calculate all radius levels
     const radii = Array.from(
       { length: (initialRadius - 100) / 100 + 1 },
       (_, i) => initialRadius - i * 100
@@ -31,15 +33,14 @@ export class GridManager {
       gridId += placed;
       totalPlaced += placed;
 
-      if (placed === 0) continue; // Skip logging empty radii
+      if (placed === 0) continue;
 
       console.log(
-        `Radius ${radius}m: ${placed} circles (total: ${totalPlaced})`
+        `Radius ${radius}m: ${placed} circles (total: ${totalPlaced}) - ${startTime.fromNow()}`
       );
     }
 
-    const totalTime = dayjs().diff(startTime, "minute");
-    console.log(`Grid complete: ${totalPlaced} circles in ${totalTime}m`);
+    console.log(`Grid complete: ${totalPlaced} circles - ${startTime.fromNow()}`);
   }
 
   private async processRadiusOptimized(
@@ -49,7 +50,6 @@ export class GridManager {
   ): Promise<number> {
     const latSpacing = (radius * 2.0 * 360.0) / 40008000.0;
 
-    // Single optimized query with spatial indexing
     const validPositions = await db.execute(sql`
       WITH RECURSIVE
       grid_bounds AS (
@@ -101,7 +101,6 @@ export class GridManager {
 
     if (validPositions.length === 0) return 0;
 
-    // Batch insert with optimal batch size
     const optimalBatchSize = Math.min(1000, validPositions.length);
     let inserted = 0;
 
