@@ -18,6 +18,7 @@ export function injectGridData() {
       const gridData = cells.map((cell) => ({
         lat: parseFloat(cell.latitude),
         lng: parseFloat(cell.longitude),
+        level: cell.level,
         radius: cell.radius,
       }));
 

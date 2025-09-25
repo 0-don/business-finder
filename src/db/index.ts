@@ -39,6 +39,21 @@ export async function createPostgreSQLFunctions() {
     END;
     $$ LANGUAGE plpgsql IMMUTABLE;
   `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_spatial 
+    ON grid_cell USING GIST (circle_geometry);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_spatial 
+    ON countries USING GIST (geometry);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_subdivisions_spatial 
+    ON gadm_subdivisions USING GIST (geometry);
+  `);
 }
 
 await migrate(db, { migrationsFolder: resolve("drizzle") })
