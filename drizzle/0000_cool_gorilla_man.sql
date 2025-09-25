@@ -48,6 +48,7 @@ CREATE TABLE "grid_cell" (
 	"latitude" numeric(10, 8) NOT NULL,
 	"longitude" numeric(11, 8) NOT NULL,
 	"radius" integer NOT NULL,
+	"circle_geometry" geometry(Polygon, 4326) NOT NULL,
 	"level" integer NOT NULL,
 	"is_processed" boolean DEFAULT false,
 	"current_page" integer DEFAULT 0,
@@ -58,15 +59,6 @@ CREATE TABLE "grid_cell" (
 	CONSTRAINT "grid_cell_cell_id_unique" UNIQUE("cell_id")
 );
 --> statement-breakpoint
-CREATE TABLE "states_provinces" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"name" varchar(256) NOT NULL,
-	"country_id" integer NOT NULL,
-	"iso_3166_2" varchar(10),
-	"geometry" geometry(MultiPolygon, 4326) NOT NULL
-);
---> statement-breakpoint
-ALTER TABLE "states_provinces" ADD CONSTRAINT "states_provinces_country_id_countries_id_fk" FOREIGN KEY ("country_id") REFERENCES "public"."countries"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_place_id" ON "business" USING btree ("place_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_location" ON "business" USING btree ("latitude","longitude");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_cell_id" ON "grid_cell" USING btree ("cell_id");

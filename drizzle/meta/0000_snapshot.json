@@ -1,5 +1,5 @@
 {
-  "id": "e479923d-54dd-4a0a-a701-76319f3884d8",
+  "id": "1fe9ae2c-b43b-4135-877d-1582519b17df",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -331,6 +331,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "circle_geometry": {
+          "name": "circle_geometry",
+          "type": "geometry(Polygon, 4326)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "level": {
           "name": "level",
           "type": "integer",
@@ -407,63 +413,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.states_provinces": {
-      "name": "states_provinces",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "country_id": {
-          "name": "country_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "iso_3166_2": {
-          "name": "iso_3166_2",
-          "type": "varchar(10)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "geometry": {
-          "name": "geometry",
-          "type": "geometry(MultiPolygon, 4326)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "states_provinces_country_id_countries_id_fk": {
-          "name": "states_provinces_country_id_countries_id_fk",
-          "tableFrom": "states_provinces",
-          "tableTo": "countries",
-          "columnsFrom": [
-            "country_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
