@@ -14,12 +14,26 @@
         margin: 0;
         padding: 0;
       }
+      #distance-info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        font-family: Arial, sans-serif;
+      }
     </style>
   </head>
   <body>
     <div id="map"></div>
+    <div id="distance-info">Click two points to measure distance</div>
     <script>
       let map;
+      let clickedPoints = [];
+      let distanceLine = null;
+      let markers = [];
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
@@ -27,6 +41,8 @@
           zoom: 6,
           mapTypeId: google.maps.MapTypeId.HYBRID,
         });
+
+        map.addListener("click", handleMapClick);
 
         const geometry = {
           type: "FeatureCollection",
@@ -44,6 +60,7 @@
           strokeWeight: 3,
           strokeOpacity: 1,
           fillOpacity: 0,
+          clickable: false, // Make country borders non-clickable
         });
 
         const gridData = `{{GRID_DATA}}`;
@@ -56,12 +73,56 @@
               map: map,
               center: { lat: cell.lat, lng: cell.lng },
               radius: cell.radius,
+              clickable: false, // Make circles non-clickable
             })
         );
       }
 
+      function handleMapClick(event) {
+        const clickedLatLng = event.latLng;
+
+        const marker = new google.maps.Marker({
+          position: clickedLatLng,
+          map: map,
+          label: (clickedPoints.length + 1).toString(),
+        });
+
+        markers.push(marker);
+        clickedPoints.push(clickedLatLng);
+
+        if (clickedPoints.length === 2) {
+          const distance =
+            google.maps.geometry.spherical.computeDistanceBetween(
+              clickedPoints[0],
+              clickedPoints[1]
+            );
+
+          distanceLine = new google.maps.Polyline({
+            path: clickedPoints,
+            geodesic: true,
+            strokeColor: "#FF0000",
+            strokeOpacity: 1.0,
+            strokeWeight: 3,
+            map: map,
+          });
+
+          const distanceKm = (distance / 1000).toFixed(2);
+          document.getElementById("distance-info").innerHTML =
+            `Distance: ${distanceKm} km<br><small>Click to start new measurement</small>`;
+        } else if (clickedPoints.length > 2) {
+          // Clear and restart
+          markers.forEach((marker) => marker.setMap(null));
+          if (distanceLine) distanceLine.setMap(null);
+          markers = [];
+          clickedPoints = [];
+          document.getElementById("distance-info").innerHTML =
+            "Click two points to measure distance";
+          handleMapClick(event);
+        }
+      }
+
       window.initMap = initMap;
     </script>
-    <script src="https://maps.googleapis.com/maps/api/js?key={{GOOGLE_MAPS_JAVASCRIPT_API}}&callback=initMap"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{GOOGLE_MAPS_JAVASCRIPT_API}}&libraries=geometry&callback=initMap"></script>
   </body>
 </html>
