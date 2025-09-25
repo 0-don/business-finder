@@ -29,15 +29,27 @@ export function conflictUpdateAllExcept<
 
 export async function createPostgreSQLFunctions() {
   await db.execute(sql`
-    CREATE OR REPLACE FUNCTION calculate_lng_spacing(lat NUMERIC, radius INTEGER)
-    RETURNS NUMERIC AS $$
-    BEGIN
-      RETURN GREATEST(
-        (radius * 2 * 360.0) / (40075000.0 * GREATEST(cos(radians(lat)), 0.1)),
-        0.001
-      );
-    END;
-    $$ LANGUAGE plpgsql IMMUTABLE;
+      CREATE OR REPLACE FUNCTION calculate_lng_spacing_overlapped(lat NUMERIC, diameter INTEGER, overlap_factor NUMERIC)
+      RETURNS NUMERIC AS $$
+      BEGIN
+        RETURN GREATEST(
+          (diameter * 360.0 * overlap_factor) / (40075000.0 * GREATEST(cos(radians(lat)), 0.1)),
+          0.001
+        );
+      END;
+      $$ LANGUAGE plpgsql IMMUTABLE;
+  `);
+
+  await db.execute(sql`
+      CREATE OR REPLACE FUNCTION calculate_lng_spacing_overlapped(lat NUMERIC, diameter INTEGER, overlap_factor NUMERIC)
+      RETURNS NUMERIC AS $$
+      BEGIN
+        RETURN GREATEST(
+          (diameter * 360.0 * overlap_factor) / (40075000.0 * GREATEST(cos(radians(lat)), 0.1)),
+          0.001
+        );
+      END;
+      $$ LANGUAGE plpgsql IMMUTABLE;
   `);
 
   await db.execute(sql`

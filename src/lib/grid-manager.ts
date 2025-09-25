@@ -40,7 +40,9 @@ export class GridManager {
       );
     }
 
-    console.log(`Grid complete: ${totalPlaced} circles - ${startTime.fromNow()}`);
+    console.log(
+      `Grid complete: ${totalPlaced} circles - ${startTime.fromNow()}`
+    );
   }
 
   private async processRadiusOptimized(
@@ -48,7 +50,9 @@ export class GridManager {
     radius: number,
     startId: number
   ): Promise<number> {
-    const latSpacing = (radius * 2.0 * 360.0) / 40008000.0;
+    // Overlap factor to eliminate gaps - circles overlap by ~15%
+    const overlapFactor = 0.9999;
+    const latSpacing = (radius * 2.0 * 360.0 * overlapFactor) / 40008000.0;
 
     const validPositions = await db.execute(sql`
       WITH RECURSIVE
@@ -59,7 +63,8 @@ export class GridManager {
           ${bounds.min_lng}::numeric as min_lng,
           ${bounds.max_lng}::numeric as max_lng,
           ${latSpacing}::numeric as lat_spacing,
-          ${radius}::integer as radius
+          ${radius}::integer as radius,
+          ${overlapFactor}::numeric as overlap_factor
       ),
       lat_points AS (
         SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
@@ -71,7 +76,7 @@ export class GridManager {
           generate_series(
             gb.min_lng,
             gb.max_lng,
-            calculate_lng_spacing(lp.lat, gb.radius * 2)
+            calculate_lng_spacing_overlapped(lp.lat, gb.radius * 2, gb.overlap_factor)
           ) as lng,
           gb.radius
         FROM lat_points lp, grid_bounds gb
