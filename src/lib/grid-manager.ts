@@ -1,8 +1,8 @@
+import dayjs from "dayjs";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
-import { BoundsResult, GridPoints } from "../types";
-import { latSpacing } from "./geometry";
+import { BoundsResult } from "../types";
 
 export class GridManager {
   countryCode: string;
@@ -11,102 +11,126 @@ export class GridManager {
     this.countryCode = countryCode;
   }
 
-  async initializeCountryGrid(radius: number = 50000): Promise<void> {
-    console.log(`Starting ${this.countryCode} grid initialization...`);
+  async initializeCountryGrid(initialRadius: number = 50000): Promise<void> {
+    console.log(`Initializing grid for ${this.countryCode}...`);
+    const startTime = dayjs();
 
-    const countryCheck = await db.execute(sql`
-      SELECT name, iso_a3 FROM countries WHERE iso_a3 = ${this.countryCode}
-    `);
-
-    if (countryCheck.length === 0) {
-      console.error(`Country with code ${this.countryCode} not found`);
-      return;
-    }
-
-    console.log(`Found country: ${countryCheck[0]?.name}`);
-
-    const bbox = (
+    const bounds = (
       await db.execute(sql`
-      SELECT 
-        ST_XMin(geometry) as min_lng,
-        ST_YMin(geometry) as min_lat,
-        ST_XMax(geometry) as max_lng,
-        ST_YMax(geometry) as max_lat
-      FROM countries 
-      WHERE iso_a3 = ${this.countryCode}
-    `)
+    SELECT ST_XMin(geometry) as min_lng, ST_YMin(geometry) as min_lat,
+           ST_XMax(geometry) as max_lng, ST_YMax(geometry) as max_lat
+    FROM countries WHERE iso_a3 = ${this.countryCode}
+  `)
     )[0] as unknown as BoundsResult;
 
-    console.log(`${this.countryCode} bounding box:`, bbox);
+    let gridId = 1;
+    let totalPlaced = 0;
 
-    const gridQuery = sql`
-      WITH latitude_series AS (
-        SELECT 
-          generate_series(
-            ${bbox.min_lat}::numeric,
-            ${bbox.max_lat}::numeric,
-            ${latSpacing(radius)}::numeric
-          ) as lat
-      ),
-      grid_coordinates AS (
-        SELECT 
-          lng_series.lng as lng,
-          ls.lat,
-          row_number() OVER() as grid_id
-        FROM latitude_series ls
-        CROSS JOIN LATERAL generate_series(
-          ${bbox.min_lng}::numeric,
-          ${bbox.max_lng}::numeric,
-          calculate_lng_spacing(ls.lat, ${radius})
-        ) AS lng_series(lng)
-      ),
-      country AS (
-        SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
-      )
-      SELECT 
-        'grid_' || gc.grid_id as cell_id,
-        gc.lng,
-        gc.lat
-      FROM grid_coordinates gc, country c
-      WHERE ST_Intersects(ST_Point(gc.lng, gc.lat, 4326), c.geometry)
-      AND ST_Contains(
-        c.geometry,
-        ST_Buffer(ST_Point(gc.lng, gc.lat, 4326)::geography, ${radius * 0.95})::geometry
-      )
-      ORDER BY gc.lat, gc.lng
-    `;
+    for (let radius = initialRadius; radius >= 100; radius -= 100) {
+      const radiusStartTime = dayjs();
+      console.log(`Processing radius: ${radius}m`);
 
-    const gridPoints = (await db.execute(gridQuery)) as unknown as GridPoints[];
+      const latSpacing = (radius * 2.0 * 360.0) / 40008000.0;
 
-    const gridCells = await db
-      .insert(gridCellSchema)
-      .values(
-        gridPoints.map((row) => ({
-          cellId: row.cell_id,
-          latitude: row.lat.toString(),
-          longitude: row.lng.toString(),
-          radius: radius,
-          level: 0,
-        }))
-      )
-      .onConflictDoNothing()
-      .returning();
+      const existingCount = await db.execute(
+        sql`SELECT COUNT(*) as count FROM grid_cell`
+      );
+      console.log(
+        `  Existing circles to check against: ${existingCount[0]?.count || 0}`
+      );
 
-    console.log(`Successfully created ${gridCells.length} grid cells`);
+      const queryStartTime = dayjs();
+
+      // Process in spatial chunks to reduce overlap checks
+      const latChunkSize = latSpacing * 10; // Process 10 latitude rows at a time
+      let currentLat = bounds.min_lat;
+      let radiusTotal = 0;
+
+      while (currentLat < bounds.max_lat) {
+        const chunkEndLat = Math.min(currentLat + latChunkSize, bounds.max_lat);
+
+        const chunkPositions = await db.execute(sql`
+        WITH 
+        lat_series AS (
+          SELECT generate_series(${currentLat}::numeric, ${chunkEndLat}::numeric, ${latSpacing}::numeric) as lat
+        ),
+        grid_points AS (
+          SELECT 
+            lat,
+            lng_series.lng
+          FROM lat_series
+          CROSS JOIN LATERAL generate_series(
+            ${bounds.min_lng}::numeric,
+            ${bounds.max_lng}::numeric,
+            calculate_lng_spacing(lat, ${radius * 2})
+          ) AS lng_series(lng)
+        ),
+        country_geom AS (
+          SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
+        ),
+        -- Only check nearby circles within expanded bounds for this chunk
+        nearby_circles AS (
+          SELECT circle_geometry 
+          FROM grid_cell 
+          WHERE ST_Intersects(
+            circle_geometry,
+            ST_MakeEnvelope(${bounds.min_lng - 0.1}, ${currentLat - 0.1}, ${bounds.max_lng + 0.1}, ${chunkEndLat + 0.1}, 4326)
+          )
+        )
+        SELECT gp.lat, gp.lng
+        FROM grid_points gp, country_geom cg
+        WHERE ST_Contains(cg.geometry, ST_Point(gp.lng, gp.lat, 4326))
+          AND ST_Contains(cg.geometry, ST_Buffer(ST_Point(gp.lng, gp.lat, 4326)::geography, ${radius})::geometry)
+          AND NOT EXISTS (
+            SELECT 1 FROM nearby_circles nc
+            WHERE ST_Intersects(
+              nc.circle_geometry,
+              ST_Buffer(ST_Point(gp.lng, gp.lat, 4326)::geography, ${radius})::geometry
+            )
+          )
+        ORDER BY gp.lat, gp.lng
+      `);
+
+        if (chunkPositions.length > 0) {
+          const gridCells = chunkPositions.map((pos: any, idx: number) => ({
+            cellId: `grid_${gridId + idx}`,
+            latitude: pos.lat.toString(),
+            longitude: pos.lng.toString(),
+            radius,
+            circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
+            level: Math.floor((initialRadius - radius) / 100),
+          }));
+
+          await db.insert(gridCellSchema).values(gridCells);
+          gridId += chunkPositions.length;
+          radiusTotal += chunkPositions.length;
+          totalPlaced += chunkPositions.length;
+        }
+
+        currentLat = chunkEndLat;
+      }
+
+      const queryTime = dayjs().diff(queryStartTime, "second");
+      const radiusTime = dayjs().diff(radiusStartTime, "second");
+      console.log(`  Found ${radiusTotal} valid positions in ${queryTime}s`);
+      console.log(`  Total time for radius ${radius}m: ${radiusTime}s\n`);
+    }
+
+    const totalTime = dayjs().diff(startTime, "minute");
+    console.log(
+      `Grid initialization complete: ${totalPlaced} total circles placed in ${totalTime}m`
+    );
   }
 
   async getCountryGeometry() {
     const result = await db.execute(sql`
       SELECT ST_AsGeoJSON(geometry) as geojson 
-      FROM countries 
-      WHERE iso_a3 = ${this.countryCode}
+      FROM countries WHERE iso_a3 = ${this.countryCode}
     `);
-
     return result[0]?.geojson ? JSON.parse(result[0].geojson as string) : null;
   }
 
   async clearGrid(): Promise<void> {
-    console.log("Clearing existing grid cells...");
     await db.delete(gridCellSchema);
   }
 }

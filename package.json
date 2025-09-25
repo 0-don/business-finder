@@ -14,6 +14,7 @@
     "@ngageoint/geopackage": "4.2.6",
     "better-sqlite3": "12.4.1",
     "cli-progress": "^3.12.0",
+    "dayjs": "^1.11.18",
     "drizzle-orm": "0.44.5",
     "unzipper": "0.12.3"
   },

@@ -11,8 +11,8 @@ export function injectGridData() {
 
       const gridManager = new GridManager("DEU");
 
-      await gridManager.clearGrid();
-      await gridManager.initializeCountryGrid();
+      // await gridManager.clearGrid();
+      // await gridManager.initializeCountryGrid();
 
       const cells = await db.select().from(gridCellSchema);
       const gridData = cells.map((cell) => ({
