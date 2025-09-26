@@ -77,53 +77,51 @@ export class GridManager {
     radius: number
   ): Promise<number> {
     const validPositions = (await db.execute(sql`
-    WITH RECURSIVE
-    grid_bounds AS (
-      SELECT 
-        ${bounds.min_lat}::numeric as min_lat,
-        ${bounds.max_lat}::numeric as max_lat,
-        ${bounds.min_lng}::numeric as min_lng,
-        ${bounds.max_lng}::numeric as max_lng,
-        ${latSpacing(radius)}::numeric as lat_spacing,
-        ${radius}::integer as radius
-    ),
-    country_geom AS (
-      SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
-    ),
-    lat_points AS (
-      SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
-      FROM grid_bounds
-    ),
-    potential_points AS (
-      SELECT 
-        lp.lat,
-        generate_series(
-          gb.min_lng,
-          gb.max_lng,
-          calculate_lng_spacing(lp.lat, gb.radius * 2)
-        ) as lng,
-        gb.radius
-      FROM lat_points lp, grid_bounds gb
-    ),
-    candidate_circles AS (
-      SELECT 
-        pp.lat, 
-        pp.lng,
-        ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry as new_circle
-      FROM potential_points pp, country_geom cg
-      WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
-        AND ST_Contains(cg.geometry, 
-          ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
+      WITH RECURSIVE
+      grid_bounds AS (
+        SELECT 
+          ${bounds.min_lat}::numeric as min_lat,
+          ${bounds.max_lat}::numeric as max_lat,
+          ${bounds.min_lng}::numeric as min_lng,
+          ${bounds.max_lng}::numeric as max_lng,
+          ${latSpacing(radius)}::numeric as lat_spacing,
+          ${radius}::integer as radius
+      ),
+      country_geom AS (
+        SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
+      ),
+      lat_points AS (
+        SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
+        FROM grid_bounds
+      ),
+      potential_points AS (
+        SELECT 
+          lp.lat,
+          generate_series(
+            gb.min_lng,
+            gb.max_lng,
+            calculate_lng_spacing(lp.lat, gb.radius * 2)
+          ) as lng,
+          gb.radius
+        FROM lat_points lp, grid_bounds gb
+      ),
+      candidate_circles AS (
+        SELECT 
+          pp.lat, 
+          pp.lng,
+          ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry as new_circle
+        FROM potential_points pp, country_geom cg
+        WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
+      )
+      SELECT cc.lat, cc.lng
+      FROM candidate_circles cc, country_geom cg
+      WHERE ST_Contains(cg.geometry, cc.new_circle)
+        AND NOT EXISTS (
+          SELECT 1 FROM grid_cell gc
+          WHERE ST_Intersects(gc.circle_geometry, cc.new_circle)
         )
-    )
-    SELECT cc.lat, cc.lng
-    FROM candidate_circles cc
-    WHERE NOT EXISTS (
-      SELECT 1 FROM grid_cell gc
-      WHERE ST_Intersects(gc.circle_geometry, cc.new_circle)
-    )
-    ORDER BY cc.lat, cc.lng
-  `)) as unknown as ValidPosition[];
+      ORDER BY cc.lat, cc.lng
+    `)) as unknown as ValidPosition[];
 
     if (validPositions.length === 0) return 0;
 
