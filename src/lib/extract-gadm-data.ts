@@ -21,12 +21,18 @@ const GPKG_PATH = "./gadm_410.gpkg";
 const DOWNLOAD_URL =
   "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
 
-async function checkExistingData(): Promise<boolean> {
-  const existingCountries = await db.select().from(countries).limit(1);
-  if (existingCountries.length > 0) {
-    return true;
+async function checkExistingData(isoA3?: string): Promise<boolean> {
+  if (isoA3) {
+    const existingCountry = await db
+      .select()
+      .from(countries)
+      .where(sql`iso_a3 = ${isoA3}`)
+      .limit(1);
+    return existingCountry.length > 0;
   }
-  return false;
+
+  const existingCountries = await db.select().from(countries).limit(1);
+  return existingCountries.length > 0;
 }
 
 async function downloadGADMZip(): Promise<void> {
@@ -103,8 +109,11 @@ async function extractGADMZip(): Promise<void> {
   extractBar.stop();
 }
 
-async function seedSubdivisions(): Promise<void> {
-  console.log("Seeding Subdivisions from GPKG...");
+async function seedSubdivisions(isoA3?: string): Promise<void> {
+  const message = isoA3
+    ? `Seeding Subdivisions for ${isoA3} from GPKG...`
+    : "Seeding Subdivisions from GPKG...";
+  console.log(message);
 
   const geoPackage = await GeoPackageAPI.open(GPKG_PATH);
   const featureDao = geoPackage.getFeatureDao("gadm_410");
@@ -113,6 +122,7 @@ async function seedSubdivisions(): Promise<void> {
 
   let subdivisions: Subdivision[] = [];
   let processedRecords = 0;
+  let filteredRecords = 0;
 
   const subdivisionsBar = new cliProgress.SingleBar(
     {
@@ -129,16 +139,30 @@ async function seedSubdivisions(): Promise<void> {
     const feature = featureDao.getRow(row);
     const { geometry, values } = feature;
 
-    if (!geometry?.geometry || !values?.GID_0) continue;
+    if (!geometry?.geometry || !values?.GID_0) {
+      processedRecords++;
+      subdivisionsBar.update(processedRecords);
+      continue;
+    }
+
+    const recordIsoA3 = values.GID_0.toString();
+
+    // Skip if filtering by ISO and this record doesn't match
+    if (isoA3 && recordIsoA3 !== isoA3) {
+      processedRecords++;
+      subdivisionsBar.update(processedRecords);
+      continue;
+    }
 
     subdivisions.push({
       uid: Number(values.UID),
       countryName: (values.COUNTRY || values.NAME_0)!.toString().trim(),
-      isoA3: values.GID_0.toString(),
+      isoA3: recordIsoA3,
       geometry: sql`ST_GeomFromText(${geometry.geometry.toWkt()}, 4326)`,
     });
 
     processedRecords++;
+    filteredRecords++;
 
     if (subdivisions.length >= batchSize) {
       await db
@@ -159,18 +183,30 @@ async function seedSubdivisions(): Promise<void> {
   }
 
   subdivisionsBar.stop();
+
+  if (isoA3) {
+    console.log(`Processed ${filteredRecords} subdivisions for ${isoA3}`);
+  }
+
   geoPackage.close();
 }
 
-async function createCountriesFromSubdivisions(): Promise<void> {
-  console.log("Creating countries from subdivisions...");
+async function createCountriesFromSubdivisions(isoA3?: string): Promise<void> {
+  const message = isoA3
+    ? `Creating country ${isoA3} from subdivisions...`
+    : "Creating countries from subdivisions...";
+  console.log(message);
 
-  const distinctCountries = await db
+  const distinctCountriesQuery = db
     .selectDistinct({
       iso_a3: gadmSubdivisions.isoA3,
       country_name: gadmSubdivisions.countryName,
     })
     .from(gadmSubdivisions);
+
+  const distinctCountries = isoA3
+    ? await distinctCountriesQuery.where(sql`iso_a3 = ${isoA3}`)
+    : await distinctCountriesQuery;
 
   const countriesBar = new cliProgress.SingleBar(
     {
@@ -206,11 +242,11 @@ async function createCountriesFromSubdivisions(): Promise<void> {
   countriesBar.stop();
 }
 
-export async function extractGADMData(): Promise<void> {
-  if (await checkExistingData()) return;
+export async function extractGADMData(isoA3: string = "DEU"): Promise<void> {
+  if (await checkExistingData(isoA3)) return;
 
   await downloadGADMZip();
   await extractGADMZip();
-  await seedSubdivisions();
-  await createCountriesFromSubdivisions();
+  await seedSubdivisions(isoA3);
+  await createCountriesFromSubdivisions(isoA3);
 }
