@@ -37,10 +37,11 @@ CREATE TABLE "countries" (
 --> statement-breakpoint
 CREATE TABLE "gadm_subdivisions" (
 	"id" serial PRIMARY KEY NOT NULL,
+	"uid" integer NOT NULL,
 	"country_name" varchar(256) NOT NULL,
 	"iso_a3" varchar(3) NOT NULL,
 	"geometry" geometry(MultiPolygon, 4326) NOT NULL,
-	CONSTRAINT "gadm_subdivisions_iso_a3_unique" UNIQUE("iso_a3")
+	CONSTRAINT "gadm_subdivisions_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
 CREATE TABLE "grid_cell" (

@@ -1,5 +1,5 @@
 {
-  "id": "95f8d28a-8c53-49c7-9047-7ae9833d763f",
+  "id": "5fd2bd73-8deb-4eae-94d0-234df43bba33",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -270,6 +270,12 @@
           "primaryKey": true,
           "notNull": true
         },
+        "uid": {
+          "name": "uid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "country_name": {
           "name": "country_name",
           "type": "varchar(256)",
@@ -293,11 +299,11 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "gadm_subdivisions_iso_a3_unique": {
-          "name": "gadm_subdivisions_iso_a3_unique",
+        "gadm_subdivisions_uid_unique": {
+          "name": "gadm_subdivisions_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "iso_a3"
+            "uid"
           ]
         }
       },

@@ -26,8 +26,9 @@ const polygon = customType<{ data: string }>({
 
 export const gadmSubdivisions = pgTable("gadm_subdivisions", {
   id: serial("id").primaryKey(),
+  uid: integer("uid").notNull().unique(),
   countryName: varchar("country_name", { length: 256 }).notNull(),
-  isoA3: varchar("iso_a3", { length: 3 }).notNull().unique(),
+  isoA3: varchar("iso_a3", { length: 3 }).notNull(),
   geometry: multipolygon("geometry").notNull(),
 });
 

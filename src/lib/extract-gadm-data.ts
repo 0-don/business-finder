@@ -9,6 +9,7 @@ import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
 
 type Subdivision = {
+  uid: number;
   countryName: string;
   isoA3: string;
   geometry: SQL<unknown>;
@@ -131,6 +132,7 @@ async function seedSubdivisions(): Promise<void> {
     if (!geometry?.geometry || !values?.GID_0) continue;
 
     subdivisions.push({
+      uid: Number(values.UID),
       countryName: (values.COUNTRY || values.NAME_0)!.toString().trim(),
       isoA3: values.GID_0.toString(),
       geometry: sql`ST_GeomFromText(${geometry.geometry.toWkt()}, 4326)`,
