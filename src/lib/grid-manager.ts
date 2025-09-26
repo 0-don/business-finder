@@ -3,7 +3,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
-import { BoundsResult } from "../types";
+import { BoundsResult, ValidPosition } from "../types";
 
 dayjs.extend(relativeTime);
 
@@ -75,10 +75,9 @@ export class GridManager {
     bounds: BoundsResult,
     radius: number
   ): Promise<number> {
-    const overlapFactor = 0.9999;
-    const latSpacing = (radius * 2.0 * 360.0 * overlapFactor) / 40008000.0;
+    const latSpacing = (radius * 2.0 * 360.0) / 40008000.0;
 
-    const validPositions = await db.execute(sql`
+    const validPositions = (await db.execute(sql`
     WITH RECURSIVE
     grid_bounds AS (
       SELECT 
@@ -87,8 +86,7 @@ export class GridManager {
         ${bounds.min_lng}::numeric as min_lng,
         ${bounds.max_lng}::numeric as max_lng,
         ${latSpacing}::numeric as lat_spacing,
-        ${radius}::integer as radius,
-        ${overlapFactor}::numeric as overlap_factor
+        ${radius}::integer as radius
     ),
     lat_points AS (
       SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
@@ -100,7 +98,7 @@ export class GridManager {
         generate_series(
           gb.min_lng,
           gb.max_lng,
-          calculate_lng_spacing_overlapped(lp.lat, gb.radius * 2, gb.overlap_factor)
+          calculate_lng_spacing(lp.lat, gb.radius * 2)
         ) as lng,
         gb.radius
       FROM lat_points lp, grid_bounds gb
@@ -120,39 +118,23 @@ export class GridManager {
           gc.circle_geometry,
           ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
         )
-        AND ST_Area(
-          ST_Intersection(
-            gc.circle_geometry,
-            ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
-          )
-        ) > (LEAST(
-          ST_Area(gc.circle_geometry),
-          ST_Area(ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry)
-        ) * 0.005)
       )
     ORDER BY pp.lat, pp.lng
-  `);
+  `)) as unknown as ValidPosition[];
 
     if (validPositions.length === 0) return 0;
 
-    const optimalBatchSize = Math.min(1000, validPositions.length);
-    let inserted = 0;
+    const gridCells = validPositions.map((pos) => ({
+      latitude: pos.lat.toString(),
+      longitude: pos.lng.toString(),
+      radius,
+      circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
+      level: Math.floor((50000 - radius) / 100),
+    }));
 
-    for (let i = 0; i < validPositions.length; i += optimalBatchSize) {
-      const batch = validPositions.slice(i, i + optimalBatchSize);
-      const gridCells = batch.map((pos: any, idx: number) => ({
-        latitude: pos.lat.toString(),
-        longitude: pos.lng.toString(),
-        radius,
-        circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
-        level: Math.floor((50000 - radius) / 100),
-      }));
+    await db.insert(gridCellSchema).values(gridCells);
 
-      await db.insert(gridCellSchema).values(gridCells);
-      inserted += batch.length;
-    }
-
-    return inserted;
+    return validPositions.length;
   }
 
   async getCountryGeometry() {
