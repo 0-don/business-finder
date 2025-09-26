@@ -29,7 +29,7 @@ export function conflictUpdateAllExcept<
 
 export async function createPostgreSQLFunctions() {
   await db.execute(sql`
-      CREATE OR REPLACE FUNCTION calculate_lng_spacing_overlapped(lat NUMERIC, diameter INTEGER, overlap_factor NUMERIC)
+      CREATE OR REPLACE FUNCTION calculate_lng_spacing(lat NUMERIC, diameter INTEGER, overlap_factor NUMERIC)
       RETURNS NUMERIC AS $$
       BEGIN
         RETURN GREATEST(
@@ -39,9 +39,7 @@ export async function createPostgreSQLFunctions() {
       END;
       $$ LANGUAGE plpgsql IMMUTABLE;
   `);
-  await db.execute(sql`
-    DROP INDEX IF EXISTS idx_grid_cell_coords;
-  `);
+  
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_geom 
     ON grid_cell USING GIST (circle_geometry);
