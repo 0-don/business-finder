@@ -14,16 +14,43 @@ export class GridManager {
     this.countryCode = countryCode;
   }
 
+  async getLastProcessedLevel(): Promise<number | null> {
+    const result = await db
+      .select({ 
+        maxLevel: sql<number>`MAX(level)` 
+      })
+      .from(gridCellSchema)
+      .limit(1);
+    
+    return result[0]?.maxLevel ?? null;
+  }
+
   async initializeCountryGrid(initialRadius: number = 50000): Promise<void> {
     const startTime = dayjs();
     console.log(`Initializing grid for ${this.countryCode}...`);
 
     const bounds = await this.getCountryBounds();
+    
+    // Check what level we left off at
+    const lastLevel = await this.getLastProcessedLevel();
+    let startRadius = initialRadius;
+    
+    if (lastLevel !== null) {
+      // Calculate radius from level: radius = 50000 - (level * 100)
+      startRadius = 50000 - (lastLevel * 100) - 100; // Start from next radius
+      console.log(`Resuming from level ${lastLevel + 1}, radius ${startRadius}m`);
+    }
 
+    // Only generate radii from where we left off
     const radii = Array.from(
-      { length: (initialRadius - 100) / 100 + 1 },
-      (_, i) => initialRadius - i * 100
-    );
+      { length: Math.max(0, (startRadius - 100) / 100 + 1) },
+      (_, i) => startRadius - i * 100
+    ).filter(r => r >= 100); // Ensure we don't go below 100m
+
+    if (radii.length === 0) {
+      console.log("Grid generation complete - all radii processed");
+      return;
+    }
 
     let gridId = 1;
     let totalPlaced =
