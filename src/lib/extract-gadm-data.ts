@@ -179,11 +179,15 @@ async function createCountriesFromSubdivisions(): Promise<void> {
   for (let i = 0; i < distinctCountries.length; i++) {
     const country = distinctCountries[i]!;
 
-    await db.execute(sql`
-      INSERT INTO countries (name, iso_a3, geometry)
-      SELECT ${country.country_name}, ${country.iso_a3}, ST_Multi(ST_Union(geometry))
-      FROM gadm_subdivisions WHERE iso_a3 = ${country.iso_a3}
-    `);
+    await db.insert(countries).values({
+      name: country.country_name,
+      isoA3: country.iso_a3,
+      geometry: sql`(
+        SELECT ST_Multi(ST_Union(geometry))
+        FROM gadm_subdivisions 
+        WHERE iso_a3 = ${country.iso_a3}
+      )`,
+    });
 
     countriesBar.update(i + 1, { country: country.country_name });
   }

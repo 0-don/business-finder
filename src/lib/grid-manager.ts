@@ -1,8 +1,8 @@
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { sql } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { gridCellSchema } from "../db/schema";
+import { countries, gridCellSchema } from "../db/schema";
 import { BoundsResult } from "../types";
 
 dayjs.extend(relativeTime);
@@ -26,7 +26,8 @@ export class GridManager {
     );
 
     let gridId = 1;
-    let totalPlaced = 0;
+    let totalPlaced =
+      (await db.select({ count: count() }).from(gridCellSchema))[0]?.count || 0;
 
     for (const radius of radii) {
       const placed = await this.processRadiusOptimized(bounds, radius, gridId);
@@ -130,20 +131,30 @@ export class GridManager {
   }
 
   async getCountryGeometry() {
-    const result = await db.execute(sql`
-      SELECT ST_AsGeoJSON(geometry) as geojson 
-      FROM countries WHERE iso_a3 = ${this.countryCode}
-    `);
-    return result[0]?.geojson ? JSON.parse(result[0].geojson as string) : null;
+    const result = await db
+      .select({
+        geojson: sql<string>`ST_AsGeoJSON(geometry)`,
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, this.countryCode))
+      .limit(1);
+
+    return result[0]?.geojson ? JSON.parse(result[0].geojson) : null;
   }
 
   private async getCountryBounds(): Promise<BoundsResult> {
-    const result = await db.execute(sql`
-      SELECT ST_XMin(geometry) as min_lng, ST_YMin(geometry) as min_lat,
-             ST_XMax(geometry) as max_lng, ST_YMax(geometry) as max_lat
-      FROM countries WHERE iso_a3 = ${this.countryCode}
-    `);
-    return result[0] as unknown as BoundsResult;
+    const result = await db
+      .select({
+        min_lng: sql<number>`ST_XMin(geometry)`,
+        min_lat: sql<number>`ST_YMin(geometry)`,
+        max_lng: sql<number>`ST_XMax(geometry)`,
+        max_lat: sql<number>`ST_YMax(geometry)`,
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, this.countryCode))
+      .limit(1);
+
+    return result[0]!;
   }
 
   async clearGrid(): Promise<void> {
