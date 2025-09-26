@@ -87,6 +87,9 @@ export class GridManager {
         ${latSpacing(radius)}::numeric as lat_spacing,
         ${radius}::integer as radius
     ),
+    country_geom AS (
+      SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
+    ),
     lat_points AS (
       SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
       FROM grid_bounds
@@ -102,23 +105,24 @@ export class GridManager {
         gb.radius
       FROM lat_points lp, grid_bounds gb
     ),
-    country_geom AS (
-      SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
-    )
-    SELECT pp.lat, pp.lng
-    FROM potential_points pp, country_geom cg
-    WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
-      AND ST_Contains(cg.geometry, 
-        ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM grid_cell gc
-        WHERE ST_Intersects(
-          gc.circle_geometry,
+    candidate_circles AS (
+      SELECT 
+        pp.lat, 
+        pp.lng,
+        ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry as new_circle
+      FROM potential_points pp, country_geom cg
+      WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
+        AND ST_Contains(cg.geometry, 
           ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
         )
-      )
-    ORDER BY pp.lat, pp.lng
+    )
+    SELECT cc.lat, cc.lng
+    FROM candidate_circles cc
+    WHERE NOT EXISTS (
+      SELECT 1 FROM grid_cell gc
+      WHERE ST_Intersects(gc.circle_geometry, cc.new_circle)
+    )
+    ORDER BY cc.lat, cc.lng
   `)) as unknown as ValidPosition[];
 
     if (validPositions.length === 0) return 0;
@@ -132,7 +136,6 @@ export class GridManager {
     }));
 
     await db.insert(gridCellSchema).values(gridCells);
-
     return validPositions.length;
   }
 
