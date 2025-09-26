@@ -39,32 +39,16 @@ export async function createPostgreSQLFunctions() {
       END;
       $$ LANGUAGE plpgsql IMMUTABLE;
   `);
-
   await db.execute(sql`
-      CREATE OR REPLACE FUNCTION calculate_lng_spacing_overlapped(lat NUMERIC, diameter INTEGER, overlap_factor NUMERIC)
-      RETURNS NUMERIC AS $$
-      BEGIN
-        RETURN GREATEST(
-          (diameter * 360.0 * overlap_factor) / (40075000.0 * GREATEST(cos(radians(lat)), 0.1)),
-          0.001
-        );
-      END;
-      $$ LANGUAGE plpgsql IMMUTABLE;
+    DROP INDEX IF EXISTS idx_grid_cell_coords;
   `);
-
   await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_spatial 
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_geom 
     ON grid_cell USING GIST (circle_geometry);
   `);
-
   await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_spatial 
-    ON countries USING GIST (geometry);
-  `);
-
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_subdivisions_spatial 
-    ON gadm_subdivisions USING GIST (geometry);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_lat_lng 
+    ON grid_cell (latitude, longitude);
   `);
 }
 

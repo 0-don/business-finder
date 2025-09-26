@@ -33,8 +33,6 @@ export class GridManager {
       gridId += placed;
       totalPlaced += placed;
 
-      if (placed === 0) continue;
-
       console.log(
         `Radius ${radius}m: ${placed} circles (total: ${totalPlaced}) - ${startTime.fromNow()}`
       );
@@ -50,59 +48,63 @@ export class GridManager {
     radius: number,
     startId: number
   ): Promise<number> {
-    // Overlap factor to eliminate gaps - circles overlap by ~15%
     const overlapFactor = 0.9999;
     const latSpacing = (radius * 2.0 * 360.0 * overlapFactor) / 40008000.0;
 
     const validPositions = await db.execute(sql`
-      WITH RECURSIVE
-      grid_bounds AS (
-        SELECT 
-          ${bounds.min_lat}::numeric as min_lat,
-          ${bounds.max_lat}::numeric as max_lat,
-          ${bounds.min_lng}::numeric as min_lng,
-          ${bounds.max_lng}::numeric as max_lng,
-          ${latSpacing}::numeric as lat_spacing,
-          ${radius}::integer as radius,
-          ${overlapFactor}::numeric as overlap_factor
-      ),
-      lat_points AS (
-        SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
-        FROM grid_bounds
-      ),
-      potential_points AS (
-        SELECT 
-          lp.lat,
-          generate_series(
-            gb.min_lng,
-            gb.max_lng,
-            calculate_lng_spacing_overlapped(lp.lat, gb.radius * 2, gb.overlap_factor)
-          ) as lng,
-          gb.radius
-        FROM lat_points lp, grid_bounds gb
-      ),
-      country_geom AS (
-        SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
+    WITH RECURSIVE
+    grid_bounds AS (
+      SELECT 
+        ${bounds.min_lat}::numeric as min_lat,
+        ${bounds.max_lat}::numeric as max_lat,
+        ${bounds.min_lng}::numeric as min_lng,
+        ${bounds.max_lng}::numeric as max_lng,
+        ${latSpacing}::numeric as lat_spacing,
+        ${radius}::integer as radius,
+        ${overlapFactor}::numeric as overlap_factor
+    ),
+    lat_points AS (
+      SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
+      FROM grid_bounds
+    ),
+    potential_points AS (
+      SELECT 
+        lp.lat,
+        generate_series(
+          gb.min_lng,
+          gb.max_lng,
+          calculate_lng_spacing_overlapped(lp.lat, gb.radius * 2, gb.overlap_factor)
+        ) as lng,
+        gb.radius
+      FROM lat_points lp, grid_bounds gb
+    ),
+    country_geom AS (
+      SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
+    )
+    SELECT pp.lat, pp.lng
+    FROM potential_points pp, country_geom cg
+    WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
+      AND ST_Contains(cg.geometry, 
+        ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
       )
-      SELECT pp.lat, pp.lng
-      FROM potential_points pp, country_geom cg
-      WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
-        AND ST_Contains(cg.geometry, 
+      AND NOT EXISTS (
+        SELECT 1 FROM grid_cell gc
+        WHERE ST_Intersects(
+          gc.circle_geometry,
           ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
         )
-        AND NOT EXISTS (
-          SELECT 1 FROM grid_cell gc
-          WHERE gc.circle_geometry && ST_Buffer(
-            ST_Point(pp.lng, pp.lat, 4326)::geography, 
-            pp.radius
-          )::geometry
-          AND ST_Intersects(
+        AND ST_Area(
+          ST_Intersection(
             gc.circle_geometry,
             ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
           )
-        )
-      ORDER BY pp.lat, pp.lng
-    `);
+        ) > (LEAST(
+          ST_Area(gc.circle_geometry),
+          ST_Area(ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry)
+        ) * 0.005)
+      )
+    ORDER BY pp.lat, pp.lng
+  `);
 
     if (validPositions.length === 0) return 0;
 
@@ -145,6 +147,8 @@ export class GridManager {
   }
 
   async clearGrid(): Promise<void> {
+    console.log("Clearing existing grid...");
     await db.delete(gridCellSchema);
+    console.log("Grid cleared");
   }
 }
