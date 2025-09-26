@@ -27,6 +27,120 @@ export class GridManager {
     this.countryCode = countryCode;
   }
 
+  async greedyCirclePacking(gridCellId: number): Promise<number> {
+    console.log(`Starting greedy packing for cell ${gridCellId}`);
+
+    const packedPositions = (await db.execute(sql`
+    WITH RECURSIVE
+    parent_cell AS (
+      SELECT 
+        id,
+        latitude,
+        longitude,
+        radius,
+        circle_geometry,
+        level
+      FROM grid_cell 
+      WHERE id = ${gridCellId}
+    ),
+    packing_params AS (
+      SELECT 
+        pc.*,
+        GREATEST(100, CAST(pc.radius * 0.15 AS integer)) as pack_radius,
+        pc.radius * 0.15 * 0.866 as lat_spacing,
+        (pc.radius * 0.15 * 2 * 360.0) / (40075000.0 * GREATEST(cos(radians(pc.latitude)), 0.1)) * 0.866 as lng_spacing
+      FROM parent_cell pc
+    ),
+    cell_bounds AS (
+      SELECT 
+        pp.*,
+        ST_XMin(pp.circle_geometry) as min_lng,
+        ST_YMin(pp.circle_geometry) as min_lat,
+        ST_XMax(pp.circle_geometry) as max_lng,
+        ST_YMax(pp.circle_geometry) as max_lat
+      FROM packing_params pp
+    ),
+    hex_candidates AS (
+      SELECT 
+        cb.min_lat + (row_num * cb.lat_spacing) as candidate_lat,
+        cb.min_lng + (col_num * cb.lng_spacing) + 
+          CASE WHEN row_num % 2 = 1 THEN cb.lng_spacing * 0.5 ELSE 0 END as candidate_lng,
+        cb.pack_radius,
+        cb.circle_geometry as parent_boundary,
+        (50000 - cb.pack_radius) / 100 as pack_level
+      FROM cell_bounds cb,
+      generate_series(0, CAST((cb.max_lat - cb.min_lat) / cb.lat_spacing AS integer)) as row_num,
+      generate_series(0, CAST((cb.max_lng - cb.min_lng) / cb.lng_spacing AS integer)) as col_num
+    ),
+    valid_candidates AS (
+      SELECT 
+        hc.candidate_lat,
+        hc.candidate_lng,
+        hc.pack_radius,
+        hc.pack_level,
+        ST_Buffer(ST_Point(hc.candidate_lng, hc.candidate_lat, 4326)::geography, hc.pack_radius)::geometry as new_circle
+      FROM hex_candidates hc
+      WHERE ST_Contains(hc.parent_boundary, ST_Point(hc.candidate_lng, hc.candidate_lat, 4326))
+        AND ST_Contains(hc.parent_boundary, ST_Buffer(ST_Point(hc.candidate_lng, hc.candidate_lat, 4326)::geography, hc.pack_radius)::geometry)
+    ),
+    non_conflicting AS (
+      SELECT 
+        vc.candidate_lat,
+        vc.candidate_lng,
+        vc.pack_radius,
+        vc.pack_level,
+        vc.new_circle,
+        ROW_NUMBER() OVER (ORDER BY vc.candidate_lat, vc.candidate_lng) as position
+      FROM valid_candidates vc
+      WHERE NOT EXISTS (
+        SELECT 1 FROM grid_cell gc
+        WHERE ST_Intersects(gc.circle_geometry, vc.new_circle)
+          AND gc.id != ${gridCellId}
+      )
+    ),
+    greedy_packed AS (
+      SELECT 
+        nc1.candidate_lat,
+        nc1.candidate_lng,
+        nc1.pack_radius,
+        nc1.pack_level
+      FROM non_conflicting nc1
+      WHERE NOT EXISTS (
+        SELECT 1 FROM non_conflicting nc2
+        WHERE nc2.position < nc1.position
+          AND ST_DWithin(
+            ST_Point(nc1.candidate_lng, nc1.candidate_lat, 4326)::geography,
+            ST_Point(nc2.candidate_lng, nc2.candidate_lat, 4326)::geography,
+            nc1.pack_radius * 2.1
+          )
+      )
+    )
+    INSERT INTO grid_cell (latitude, longitude, radius, circle_geometry, level)
+    SELECT 
+      gp.candidate_lat,
+      gp.candidate_lng,
+      gp.pack_radius,
+      ST_Buffer(ST_Point(gp.candidate_lng, gp.candidate_lat, 4326)::geography, gp.pack_radius)::geometry,
+      gp.pack_level
+    FROM greedy_packed gp
+    RETURNING id
+  `)) as unknown as { id: number }[];
+
+    // Mark parent cell as processed
+    await db
+      .update(gridCellSchema)
+      .set({
+        isProcessed: true,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(gridCellSchema.id, gridCellId));
+
+    const packedCount = packedPositions.length;
+    console.log(`Packed ${packedCount} circles into cell ${gridCellId}`);
+
+    return packedCount;
+  }
+
   async initializeCountryGrid(
     maxRadius: number = 50000,
     minRadius: number = 100
