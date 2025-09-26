@@ -16,12 +16,12 @@ export class GridManager {
 
   async getLastProcessedLevel(): Promise<number | null> {
     const result = await db
-      .select({ 
-        maxLevel: sql<number>`MAX(level)` 
+      .select({
+        maxLevel: sql<number>`MAX(level)`,
       })
       .from(gridCellSchema)
       .limit(1);
-    
+
     return result[0]?.maxLevel ?? null;
   }
 
@@ -30,35 +30,35 @@ export class GridManager {
     console.log(`Initializing grid for ${this.countryCode}...`);
 
     const bounds = await this.getCountryBounds();
-    
+
     // Check what level we left off at
     const lastLevel = await this.getLastProcessedLevel();
     let startRadius = initialRadius;
-    
+
     if (lastLevel !== null) {
       // Calculate radius from level: radius = 50000 - (level * 100)
-      startRadius = 50000 - (lastLevel * 100) - 100; // Start from next radius
-      console.log(`Resuming from level ${lastLevel + 1}, radius ${startRadius}m`);
+      startRadius = 50000 - lastLevel * 100 - 100; // Start from next radius
+      console.log(
+        `Resuming from level ${lastLevel + 1}, radius ${startRadius}m`
+      );
     }
 
     // Only generate radii from where we left off
     const radii = Array.from(
       { length: Math.max(0, (startRadius - 100) / 100 + 1) },
       (_, i) => startRadius - i * 100
-    ).filter(r => r >= 100); // Ensure we don't go below 100m
+    ).filter((r) => r >= 100); // Ensure we don't go below 100m
 
     if (radii.length === 0) {
       console.log("Grid generation complete - all radii processed");
       return;
     }
 
-    let gridId = 1;
     let totalPlaced =
       (await db.select({ count: count() }).from(gridCellSchema))[0]?.count || 0;
 
     for (const radius of radii) {
-      const placed = await this.processRadiusOptimized(bounds, radius, gridId);
-      gridId += placed;
+      const placed = await this.processRadiusOptimized(bounds, radius);
       totalPlaced += placed;
 
       console.log(
@@ -73,8 +73,7 @@ export class GridManager {
 
   private async processRadiusOptimized(
     bounds: BoundsResult,
-    radius: number,
-    startId: number
+    radius: number
   ): Promise<number> {
     const overlapFactor = 0.9999;
     const latSpacing = (radius * 2.0 * 360.0 * overlapFactor) / 40008000.0;
