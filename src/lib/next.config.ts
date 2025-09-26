@@ -1,153 +1,270 @@
 import dayjs from "dayjs";
-import { sql } from "drizzle-orm";
-import { db } from "../db";
-import { gridCellSchema } from "../db/schema";
-import { BoundsResult } from "../types";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { eq, sql } from "drizzle-orm";
+import { db } from "../db";
+import { countries, gridCellSchema } from "../db/schema";
+import { BoundsResult } from "../types";
 
 dayjs.extend(relativeTime);
 
+interface Circle {
+  lat: number;
+  lng: number;
+  radius: number;
+}
+
+interface Point {
+  lat: number;
+  lng: number;
+}
+
 export class GridManager {
   countryCode: string;
+  private placedCircles: Circle[] = [];
+  private countryGeometry: any = null;
 
   constructor(countryCode: string) {
     this.countryCode = countryCode;
   }
 
-  async initializeCountryGrid(initialRadius: number = 50000): Promise<void> {
+  async initializeCountryGrid(
+    maxRadius: number = 50000,
+    minRadius: number = 100
+  ): Promise<void> {
     const startTime = dayjs();
-    console.log(`Initializing grid for ${this.countryCode}...`);
-
-    const bounds = await this.getCountryBounds();
-
-    const radii = Array.from(
-      { length: (initialRadius - 100) / 100 + 1 },
-      (_, i) => initialRadius - i * 100
+    console.log(
+      `Initializing optimal circle packing for ${this.countryCode}...`
     );
 
-    let gridId = 1;
-    let totalPlaced = 0;
+    await this.loadCountryGeometry();
+    const bounds = await this.getCountryBounds();
 
-    for (const radius of radii) {
-      const placed = await this.processRadiusOptimized(bounds, radius, gridId);
-      gridId += placed;
-      totalPlaced += placed;
+    // Check existing circles to resume
+    const existingCircles = await this.getExistingCircles();
+    this.placedCircles = existingCircles;
 
-      console.log(
-        `Radius ${radius}m: ${placed} circles (total: ${totalPlaced}) - ${startTime.fromNow()}`
-      );
+    let currentRadius = maxRadius;
+    const radiusReduction = 0.85; // Reduce by 15% each iteration
+
+    while (currentRadius >= minRadius) {
+      const newCircles = await this.packCirclesAtRadius(bounds, currentRadius);
+
+      if (newCircles.length > 0) {
+        await this.saveCircles(newCircles, currentRadius);
+        this.placedCircles.push(...newCircles);
+
+        console.log(
+          `Radius ${Math.round(currentRadius)}m: ${newCircles.length} circles (total: ${this.placedCircles.length}) - ${startTime.fromNow()}`
+        );
+      }
+
+      currentRadius *= radiusReduction;
     }
 
     console.log(
-      `Grid complete: ${totalPlaced} circles - ${startTime.fromNow()}`
+      `Circle packing complete: ${this.placedCircles.length} circles - ${startTime.fromNow()}`
     );
   }
 
-  private async processRadiusOptimized(
+  private async packCirclesAtRadius(
     bounds: BoundsResult,
-    radius: number,
-    startId: number
-  ): Promise<number> {
-    const overlapFactor = 0.999;
-    const latSpacing = (radius * 2.0 * 360.0 * overlapFactor) / 40008000.0;
+    radius: number
+  ): Promise<Circle[]> {
+    const newCircles: Circle[] = [];
+    const spacing = radius * 1.8; // Minimum distance between circle centers
 
-    const validPositions = await db.execute(sql`
-    WITH RECURSIVE
-    grid_bounds AS (
-      SELECT 
-        ${bounds.min_lat}::numeric as min_lat,
-        ${bounds.max_lat}::numeric as max_lat,
-        ${bounds.min_lng}::numeric as min_lng,
-        ${bounds.max_lng}::numeric as max_lng,
-        ${latSpacing}::numeric as lat_spacing,
-        ${radius}::integer as radius,
-        ${overlapFactor}::numeric as overlap_factor
-    ),
-    lat_points AS (
-      SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
-      FROM grid_bounds
-    ),
-    potential_points AS (
-      SELECT 
-        lp.lat,
-        generate_series(
-          gb.min_lng,
-          gb.max_lng,
-          calculate_lng_spacing_overlapped(lp.lat, gb.radius * 2, gb.overlap_factor)
-        ) as lng,
-        gb.radius
-      FROM lat_points lp, grid_bounds gb
-    ),
-    country_geom AS (
-      SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
-    )
-    SELECT pp.lat, pp.lng
-    FROM potential_points pp, country_geom cg
-    WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
-      AND ST_Contains(cg.geometry, 
-        ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM grid_cell gc
-        WHERE ST_Intersects(
-          gc.circle_geometry,
-          ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
-        )
-        AND ST_Area(
-          ST_Intersection(
-            gc.circle_geometry,
-            ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry
-          )
-        ) > (ST_Area(ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry) * 0.05)
-      )
-    ORDER BY pp.lat, pp.lng
-    LIMIT 1000
-  `);
+    // Generate candidate positions using hexagonal packing pattern
+    const candidates = this.generateHexagonalCandidates(bounds, spacing);
 
-    if (validPositions.length === 0) return 0;
-
-    const optimalBatchSize = Math.min(1000, validPositions.length);
-    let inserted = 0;
-
-    for (let i = 0; i < validPositions.length; i += optimalBatchSize) {
-      const batch = validPositions.slice(i, i + optimalBatchSize);
-      const gridCells = batch.map((pos: any, idx: number) => ({
-        cellId: `grid_${startId + inserted + idx}`,
-        latitude: pos.lat.toString(),
-        longitude: pos.lng.toString(),
-        radius,
-        circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
-        level: Math.floor((50000 - radius) / 100),
-      }));
-
-      await db.insert(gridCellSchema).values(gridCells);
-      inserted += batch.length;
+    // Process candidates in batches for better performance
+    const batchSize = 1000;
+    for (let i = 0; i < candidates.length; i += batchSize) {
+      const batch = candidates.slice(i, i + batchSize);
+      const validBatch = await this.filterValidPositions(batch, radius);
+      newCircles.push(...validBatch);
     }
 
-    return inserted;
+    return newCircles;
+  }
+
+  private generateHexagonalCandidates(
+    bounds: BoundsResult,
+    spacing: number
+  ): Point[] {
+    const candidates: Point[] = [];
+    const latSpacing = (spacing * 360.0) / 40008000.0; // Convert meters to degrees
+
+    let rowIndex = 0;
+    for (let lat = bounds.min_lat; lat <= bounds.max_lat; lat += latSpacing) {
+      const lngSpacing = this.calculateLngSpacing(lat, spacing);
+      const offset = (rowIndex % 2) * (lngSpacing / 2); // Hexagonal offset
+
+      for (
+        let lng = bounds.min_lng + offset;
+        lng <= bounds.max_lng;
+        lng += lngSpacing
+      ) {
+        candidates.push({ lat, lng });
+      }
+      rowIndex++;
+    }
+
+    return candidates;
+  }
+
+  private async filterValidPositions(
+    candidates: Point[],
+    radius: number
+  ): Promise<Circle[]> {
+    if (candidates.length === 0) return [];
+
+    // Build candidate values for SQL
+    const candidateValues = candidates
+      .map((p) => `(${p.lat}, ${p.lng})`)
+      .join(",");
+
+    const tolerance = radius < 1000 ? radius * 0.01 : 0;
+    const segments = radius >= 1000 ? 32 : radius >= 500 ? 16 : 8;
+
+    const bufferCall =
+      segments < 32
+        ? `ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius}, 'quad_segs=${segments}')`
+        : `ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})`;
+
+    const validPositions = (await db.execute(sql`
+      WITH 
+      candidates(lat, lng) AS (VALUES ${sql.raw(candidateValues)}),
+      country_geom AS (
+        SELECT ${
+          tolerance > 0
+            ? sql`ST_Simplify(geometry, ${tolerance})`
+            : sql`geometry`
+        } as geometry 
+        FROM countries 
+        WHERE iso_a3 = ${this.countryCode}
+      ),
+      valid_candidates AS (
+        SELECT c.lat, c.lng,
+               ${sql.raw(bufferCall)}::geometry as circle_geom
+        FROM candidates c, country_geom cg
+        WHERE ST_Contains(cg.geometry, ST_Point(c.lng, c.lat, 4326))
+          AND ST_Contains(cg.geometry, ${sql.raw(bufferCall)}::geometry)
+      )
+      SELECT vc.lat, vc.lng
+      FROM valid_candidates vc
+      WHERE NOT EXISTS (
+        SELECT 1 FROM grid_cell gc
+        WHERE ST_DWithin(gc.circle_geometry, ST_Point(vc.lng, vc.lat, 4326), ${radius * 2.1})
+        AND ST_Intersects(gc.circle_geometry, vc.circle_geom)
+      )
+    `)) as { lat: number; lng: number }[];
+
+    return validPositions.map((pos) => ({
+      lat: pos.lat,
+      lng: pos.lng,
+      radius,
+    }));
+  }
+
+  private calculateLngSpacing(lat: number, meterSpacing: number): number {
+    const latRad = (lat * Math.PI) / 180;
+    return Math.max(
+      (meterSpacing * 360.0) / (40075000.0 * Math.cos(latRad)),
+      0.001
+    );
+  }
+
+  private async saveCircles(circles: Circle[], radius: number): Promise<void> {
+    if (circles.length === 0) return;
+
+    const segments = radius >= 1000 ? 32 : radius >= 500 ? 16 : 8;
+    const bufferCall = segments < 32 ? `'quad_segs=${segments}'` : "";
+    const roundedRadius = Math.round(radius); // Fix: Round radius to integer
+
+    const gridCells = circles.map((circle) => ({
+      latitude: circle.lat.toString(),
+      longitude: circle.lng.toString(),
+      radius: roundedRadius, // Use rounded radius
+      circleGeometry: bufferCall
+        ? sql.raw(
+            `ST_Buffer(ST_Point(${circle.lng}, ${circle.lat}, 4326)::geography, ${circle.radius}, ${bufferCall})::geometry`
+          )
+        : sql.raw(
+            `ST_Buffer(ST_Point(${circle.lng}, ${circle.lat}, 4326)::geography, ${circle.radius})::geometry`
+          ),
+      level: Math.floor((50000 - roundedRadius) / 100),
+    }));
+
+    await db.insert(gridCellSchema).values(gridCells);
+  }
+  private async getExistingCircles(): Promise<Circle[]> {
+    const existing = await db
+      .select({
+        lat: sql<number>`latitude::numeric`,
+        lng: sql<number>`longitude::numeric`,
+        radius: gridCellSchema.radius,
+      })
+      .from(gridCellSchema);
+
+    return existing.map((row) => ({
+      lat: row.lat,
+      lng: row.lng,
+      radius: row.radius,
+    }));
+  }
+
+  private async loadCountryGeometry(): Promise<void> {
+    const result = await db
+      .select({
+        geojson: sql<string>`ST_AsGeoJSON(geometry)`,
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, this.countryCode))
+      .limit(1);
+
+    this.countryGeometry = result[0]?.geojson
+      ? JSON.parse(result[0].geojson)
+      : null;
   }
 
   async getCountryGeometry() {
-    const result = await db.execute(sql`
-      SELECT ST_AsGeoJSON(geometry) as geojson 
-      FROM countries WHERE iso_a3 = ${this.countryCode}
-    `);
-    return result[0]?.geojson ? JSON.parse(result[0].geojson as string) : null;
+    if (!this.countryGeometry) {
+      await this.loadCountryGeometry();
+    }
+    return this.countryGeometry;
   }
 
   private async getCountryBounds(): Promise<BoundsResult> {
-    const result = await db.execute(sql`
-      SELECT ST_XMin(geometry) as min_lng, ST_YMin(geometry) as min_lat,
-             ST_XMax(geometry) as max_lng, ST_YMax(geometry) as max_lat
-      FROM countries WHERE iso_a3 = ${this.countryCode}
-    `);
-    return result[0] as unknown as BoundsResult;
+    const result = await db
+      .select({
+        min_lng: sql<number>`ST_XMin(geometry)`,
+        min_lat: sql<number>`ST_YMin(geometry)`,
+        max_lng: sql<number>`ST_XMax(geometry)`,
+        max_lat: sql<number>`ST_YMax(geometry)`,
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, this.countryCode))
+      .limit(1);
+
+    return result[0]!;
   }
 
   async clearGrid(): Promise<void> {
     console.log("Clearing existing grid...");
     await db.delete(gridCellSchema);
+    this.placedCircles = [];
     console.log("Grid cleared");
+  }
+
+  async getLastProcessedLevel(): Promise<number | null> {
+    const result = await db
+      .select({
+        maxLevel: sql<number>`MAX(level)`,
+      })
+      .from(gridCellSchema)
+      .limit(1);
+
+    return result[0]?.maxLevel ?? null;
   }
 }
 

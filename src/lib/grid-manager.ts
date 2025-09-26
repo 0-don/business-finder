@@ -76,6 +76,20 @@ export class GridManager {
     bounds: BoundsResult,
     radius: number
   ): Promise<number> {
+    // Progressive precision reduction starting from 1000m
+    const getOptimizations = (radius: number) => {
+      if (radius >= 1000) return { segments: 32, tolerance: 0, useSegments: false };
+      if (radius >= 500) return { segments: 16, tolerance: radius * 0.005, useSegments: true };
+      return { segments: 8, tolerance: radius * 0.01, useSegments: true }; // 1m tolerance for 100m circles
+    };
+
+    const { segments, tolerance, useSegments } = getOptimizations(radius);
+
+    // Build the buffer function call as a string
+    const bufferCall = useSegments 
+      ? `ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius, 'quad_segs=${segments}')`
+      : `ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)`;
+
     const validPositions = (await db.execute(sql`
       WITH RECURSIVE
       grid_bounds AS (
@@ -88,7 +102,11 @@ export class GridManager {
           ${radius}::integer as radius
       ),
       country_geom AS (
-        SELECT geometry FROM countries WHERE iso_a3 = ${this.countryCode}
+        SELECT ${tolerance > 0 
+          ? sql`ST_Simplify(geometry, ${tolerance})` 
+          : sql`geometry`} as geometry 
+        FROM countries 
+        WHERE iso_a3 = ${this.countryCode}
       ),
       lat_points AS (
         SELECT generate_series(min_lat, max_lat, lat_spacing) as lat
@@ -109,7 +127,7 @@ export class GridManager {
         SELECT 
           pp.lat, 
           pp.lng,
-          ST_Buffer(ST_Point(pp.lng, pp.lat, 4326)::geography, pp.radius)::geometry as new_circle
+          ${sql.raw(bufferCall)}::geometry as new_circle
         FROM potential_points pp, country_geom cg
         WHERE ST_Contains(cg.geometry, ST_Point(pp.lng, pp.lat, 4326))
       )
@@ -118,20 +136,27 @@ export class GridManager {
       WHERE ST_Contains(cg.geometry, cc.new_circle)
         AND NOT EXISTS (
           SELECT 1 FROM grid_cell gc
-          WHERE ST_Intersects(gc.circle_geometry, cc.new_circle)
+          WHERE ST_DWithin(gc.circle_geometry, ST_Point(cc.lng, cc.lat, 4326), ${radius * 2.1})
+          AND ST_Intersects(gc.circle_geometry, cc.new_circle)
         )
       ORDER BY cc.lat, cc.lng
     `)) as unknown as ValidPosition[];
 
     if (validPositions.length === 0) return 0;
 
-    const gridCells = validPositions.map((pos) => ({
-      latitude: pos.lat.toString(),
-      longitude: pos.lng.toString(),
-      radius,
-      circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
-      level: Math.floor((50000 - radius) / 100),
-    }));
+    const gridCells = validPositions.map((pos) => {
+      const insertBufferCall = useSegments 
+        ? `ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius}, 'quad_segs=${segments}')`
+        : `ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})`;
+
+      return {
+        latitude: pos.lat.toString(),
+        longitude: pos.lng.toString(),
+        radius,
+        circleGeometry: sql.raw(insertBufferCall + '::geometry'),
+        level: Math.floor((50000 - radius) / 100),
+      };
+    });
 
     await db.insert(gridCellSchema).values(gridCells);
     return validPositions.length;
