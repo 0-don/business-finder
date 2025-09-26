@@ -3,5 +3,5 @@ import { GridManager } from "./lib/grid-manager";
 
 const gridManager = new GridManager("DEU");
 
-await gridManager.clearGrid();
+// await gridManager.clearGrid();
 await gridManager.initializeCountryGrid();

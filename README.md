@@ -489,3 +489,9 @@ Radius 1700m: 95 circles (total: 1278) - 26 minutes ago
 Radius 1600m: 122 circles (total: 1400) - 28 minutes ago
 Radius 1500m: 153 circles (total: 1553) - 31 minutes ago
 Radius 1400m: 158 circles (total: 1711) - 34 minutes ago
+Radius 1300m: 237 circles (total: 1948) - 38 minutes ago
+Radius 1200m: 269 circles (total: 2217) - 43 minutes ago
+Radius 1100m: 295 circles (total: 2512) - an hour ago
+Radius 1000m: 397 circles (total: 2909) - an hour ago
+Radius 900m: 0 circles (total: 2909) - an hour ago
+Radius 800m: 0 circles (total: 2909) - an hour ago
