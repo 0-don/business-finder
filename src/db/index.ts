@@ -40,6 +40,7 @@ export async function createPostgreSQLFunctions() {
   $$ LANGUAGE plpgsql IMMUTABLE;
 `);
 
+  // For initial grid creation (country-wide operations)
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_geom 
     ON grid_cell USING GIST (circle_geometry);
@@ -47,6 +48,22 @@ export async function createPostgreSQLFunctions() {
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_lat_lng 
     ON grid_cell (latitude, longitude);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_iso_geom 
+    ON countries USING GIST (geometry);
+  `);
+
+  // For greedy packing (single cell operations)
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_id_radius 
+    ON grid_cell (id, radius);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_processed 
+    ON grid_cell (is_processed) WHERE is_processed IS NOT TRUE;
   `);
 }
 
