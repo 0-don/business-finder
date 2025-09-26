@@ -4,6 +4,7 @@ import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
 import { BoundsResult, ValidPosition } from "../types";
+import { latSpacing } from "./constants";
 
 dayjs.extend(relativeTime);
 
@@ -75,8 +76,6 @@ export class GridManager {
     bounds: BoundsResult,
     radius: number
   ): Promise<number> {
-    const latSpacing = (radius * 2.0 * 360.0) / 40008000.0;
-
     const validPositions = (await db.execute(sql`
     WITH RECURSIVE
     grid_bounds AS (
@@ -85,7 +84,7 @@ export class GridManager {
         ${bounds.max_lat}::numeric as max_lat,
         ${bounds.min_lng}::numeric as min_lng,
         ${bounds.max_lng}::numeric as max_lng,
-        ${latSpacing}::numeric as lat_spacing,
+        ${latSpacing(radius)}::numeric as lat_spacing,
         ${radius}::integer as radius
     ),
     lat_points AS (
