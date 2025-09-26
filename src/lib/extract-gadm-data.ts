@@ -139,14 +139,20 @@ async function seedSubdivisions(): Promise<void> {
     processedRecords++;
 
     if (subdivisions.length >= batchSize) {
-      await db.insert(gadmSubdivisions).values(subdivisions);
+      await db
+        .insert(gadmSubdivisions)
+        .values(subdivisions)
+        .onConflictDoNothing();
       subdivisionsBar.update(processedRecords);
       subdivisions = [];
     }
   }
 
   if (subdivisions.length > 0) {
-    await db.insert(gadmSubdivisions).values(subdivisions);
+    await db
+      .insert(gadmSubdivisions)
+      .values(subdivisions)
+      .onConflictDoNothing();
     subdivisionsBar.update(processedRecords);
   }
 
@@ -179,15 +185,18 @@ async function createCountriesFromSubdivisions(): Promise<void> {
   for (let i = 0; i < distinctCountries.length; i++) {
     const country = distinctCountries[i]!;
 
-    await db.insert(countries).values({
-      name: country.country_name,
-      isoA3: country.iso_a3,
-      geometry: sql`(
+    await db
+      .insert(countries)
+      .values({
+        name: country.country_name,
+        isoA3: country.iso_a3,
+        geometry: sql`(
         SELECT ST_Multi(ST_Union(geometry))
         FROM gadm_subdivisions 
         WHERE iso_a3 = ${country.iso_a3}
       )`,
-    });
+      })
+      .onConflictDoNothing();
 
     countriesBar.update(i + 1, { country: country.country_name });
   }

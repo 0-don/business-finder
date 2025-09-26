@@ -39,12 +39,12 @@ CREATE TABLE "gadm_subdivisions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"country_name" varchar(256) NOT NULL,
 	"iso_a3" varchar(3) NOT NULL,
-	"geometry" geometry(MultiPolygon, 4326) NOT NULL
+	"geometry" geometry(MultiPolygon, 4326) NOT NULL,
+	CONSTRAINT "gadm_subdivisions_iso_a3_unique" UNIQUE("iso_a3")
 );
 --> statement-breakpoint
 CREATE TABLE "grid_cell" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"cell_id" text NOT NULL,
 	"latitude" numeric(10, 8) NOT NULL,
 	"longitude" numeric(11, 8) NOT NULL,
 	"radius" integer NOT NULL,
@@ -55,10 +55,8 @@ CREATE TABLE "grid_cell" (
 	"next_page_token" text,
 	"total_results" integer DEFAULT 0,
 	"created_at" timestamp DEFAULT now(),
-	"updated_at" timestamp DEFAULT now(),
-	CONSTRAINT "grid_cell_cell_id_unique" UNIQUE("cell_id")
+	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX "idx_place_id" ON "business" USING btree ("place_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_location" ON "business" USING btree ("latitude","longitude");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_cell_id" ON "grid_cell" USING btree ("cell_id");
+CREATE UNIQUE INDEX "idx_location" ON "business" USING btree ("latitude","longitude");

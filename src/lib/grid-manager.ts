@@ -115,7 +115,6 @@ export class GridManager {
     for (let i = 0; i < validPositions.length; i += optimalBatchSize) {
       const batch = validPositions.slice(i, i + optimalBatchSize);
       const gridCells = batch.map((pos: any, idx: number) => ({
-        cellId: `grid_${startId + inserted + idx}`,
         latitude: pos.lat.toString(),
         longitude: pos.lng.toString(),
         radius,
