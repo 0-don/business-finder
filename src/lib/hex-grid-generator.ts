@@ -99,6 +99,17 @@ class HexGridGenerator {
     return { latDeg, lngDeg };
   }
 
+  private async getLowestExistingRadius(): Promise<number | null> {
+    const result = await db
+      .select({
+        minRadius: sql<number>`MIN(${gridCellSchema.radiusMeters})`,
+      })
+      .from(gridCellSchema)
+      .limit(1);
+
+    return result[0]?.minRadius || null;
+  }
+
   private generateHexCandidates(bounds: Bounds, radius: number): Point[] {
     const candidates: Point[] = [];
     // Tighter vertical spacing - reduce from sqrt(3) ≈ 1.732 to 1.5
@@ -164,7 +175,25 @@ class HexGridGenerator {
 
   async generateGrid(): Promise<number> {
     console.log(`Starting grid generation for ${this.config.countryCode}`);
+
+    // Check for existing grid and resume from lowest radius
+    const existingMinRadius = await this.getLowestExistingRadius();
     let currentRadius = this.config.maxRadius;
+
+    if (existingMinRadius) {
+      // Resume from just below the existing minimum radius
+      currentRadius = Math.floor(existingMinRadius - 1);
+      console.log(
+        `Resuming grid generation from radius ${currentRadius}m (existing min: ${existingMinRadius}m)`
+      );
+
+      // Count existing circles for accurate total
+      const existingCount = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(gridCellSchema);
+      this.totalCircles = existingCount[0]?.count || 0;
+    }
+
     let level = 0;
 
     while (currentRadius && currentRadius >= this.config.minRadius) {
@@ -177,7 +206,7 @@ class HexGridGenerator {
       currentRadius =
         nextRadius && nextRadius < currentRadius
           ? nextRadius
-          : Math.floor(currentRadius * 0.9); // More conservative reduction
+          : Math.floor(currentRadius * 0.9);
     }
 
     console.log(
@@ -200,7 +229,7 @@ export async function generateCountryGrid(
   const db = new DatabaseManager(countryCode);
 
   try {
-    await db.clearGrid();
+    // await db.clearGrid();
     return await generator.generateGrid();
   } catch (error) {
     console.error("Error:", error);
