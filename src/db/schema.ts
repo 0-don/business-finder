@@ -1,7 +1,7 @@
 import {
   boolean,
   customType,
-  decimal,
+  doublePrecision,
   integer,
   jsonb,
   pgTable,
@@ -12,15 +12,15 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-const multipolygon = customType<{ data: string }>({
+const geometry = customType<{ data: string }>({
   dataType() {
-    return "geometry(MultiPolygon, 4326)";
+    return "geometry(Geometry, 4326)";
   },
 });
 
-const polygon = customType<{ data: string }>({
+const point = customType<{ data: string }>({
   dataType() {
-    return "geometry(Polygon, 4326)";
+    return "geometry(Point, 4326)";
   },
 });
 
@@ -29,14 +29,14 @@ export const gadmSubdivisions = pgTable("gadm_subdivisions", {
   uid: integer("uid").notNull().unique(),
   countryName: varchar("country_name", { length: 256 }).notNull(),
   isoA3: varchar("iso_a3", { length: 3 }).notNull(),
-  geometry: multipolygon("geometry").notNull(),
+  geometry: geometry("geometry").notNull(),
 });
 
 export const countries = pgTable("countries", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 256 }).notNull(),
   isoA3: varchar("iso_a3", { length: 3 }).notNull().unique(),
-  geometry: multipolygon("geometry").notNull(),
+  geometry: geometry("geometry").notNull(),
 });
 
 export const businessSchema = pgTable(
@@ -48,10 +48,9 @@ export const businessSchema = pgTable(
     address: text("address").notNull(),
     vicinity: text("vicinity"),
     formattedAddress: text("formatted_address"),
-    rating: decimal("rating", { precision: 3, scale: 2 }),
+    rating: doublePrecision("rating"),
     userRatingsTotal: integer("user_ratings_total").default(0),
-    latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
-    longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+    location: point("location").notNull(), // Single point geometry instead of lat/lng
     businessStatus: text("business_status"),
     types: jsonb("types").$type<string[]>(),
     openingHours: jsonb("opening_hours"),
@@ -72,23 +71,29 @@ export const businessSchema = pgTable(
   },
   (table) => [
     uniqueIndex("idx_place_id").on(table.placeId),
-    uniqueIndex("idx_location").on(table.latitude, table.longitude),
+    uniqueIndex("idx_location_gist").using("gist", table.location),
   ]
 );
 
-export const gridCellSchema = pgTable("grid_cell", {
-  id: serial("id").primaryKey(),
-  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
-  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
-  radius: integer("radius").notNull(),
-  circleGeometry: polygon("circle_geometry").notNull(),
-  level: integer("level").notNull(),
-  isProcessed: boolean("is_processed").default(false),
-  currentPage: integer("current_page").default(0),
-  nextPageToken: text("next_page_token"),
-  totalResults: integer("total_results").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
+export const gridCellSchema = pgTable(
+  "grid_cell",
+  {
+    id: serial("id").primaryKey(),
+    center: point("center").notNull(), // Point geometry instead of lat/lng
+    radiusMeters: doublePrecision("radius_meters").notNull(), // Use double for precision
+    circle: geometry("circle").notNull(), // Circle geometry
+    level: integer("level").notNull(),
+    isProcessed: boolean("is_processed").default(false),
+    currentPage: integer("current_page").default(0),
+    nextPageToken: text("next_page_token"),
+    totalResults: integer("total_results").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("idx_grid_center_gist").using("gist", table.center),
+    uniqueIndex("idx_grid_circle_gist").using("gist", table.circle),
+  ]
+);

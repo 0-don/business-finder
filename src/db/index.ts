@@ -27,49 +27,66 @@ export function conflictUpdateAllExcept<
   );
 }
 
-export async function createPostgreSQLFunctions() {
-  await db.execute(sql`
-  CREATE OR REPLACE FUNCTION calculate_lng_spacing(lat NUMERIC, diameter INTEGER)
-  RETURNS NUMERIC AS $$
-  BEGIN
-    RETURN GREATEST(
-      (diameter * 360.0) / (40075000.0 * GREATEST(cos(radians(lat)), 0.1)),
-      0.001
-    );
-  END;
-  $$ LANGUAGE plpgsql IMMUTABLE;
-`);
-
-  // For initial grid creation (country-wide operations)
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_geom 
-    ON grid_cell USING GIST (circle_geometry);
-  `);
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_lat_lng 
-    ON grid_cell (latitude, longitude);
-  `);
-
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_iso_geom 
+export async function createPostgreIndexes() {
+   await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
     ON countries USING GIST (geometry);
   `);
 
-  // For greedy packing (single cell operations)
   await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_id_radius 
-    ON grid_cell (id, radius);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_iso_btree 
+    ON countries (iso_a3);
+  `);
+
+  // Grid cell indexes for the new schema
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_center_gist 
+    ON grid_cell USING GIST (center);
   `);
 
   await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_processed 
-    ON grid_cell (is_processed) WHERE is_processed IS NOT TRUE;
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_circle_gist 
+    ON grid_cell USING GIST (circle);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_radius_btree 
+    ON grid_cell (radius_meters);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_btree 
+    ON grid_cell (level);
+  `);
+
+  // Composite index for common query patterns
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_radius 
+    ON grid_cell (level, radius_meters);
+  `);
+
+  // Business location index for the new schema
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_location_gist 
+    ON business USING GIST (location);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_place_id_btree 
+    ON business (place_id);
+  `);
+
+  // Processing status index (if you still need it)
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_processed 
+    ON grid_cell (is_processed) 
+    WHERE is_processed IS FALSE;
   `);
 }
 
 await migrate(db, { migrationsFolder: resolve("drizzle") })
   .then(async () => {
-    await createPostgreSQLFunctions();
+    await createPostgreIndexes();
     await extractGADMData();
   })
   .catch((err) => {

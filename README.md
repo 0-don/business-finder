@@ -5,3 +5,8 @@ docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-
 ## Restore
 
 docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql
+
+```bash
+uv sync
+uv run python generate_grid.py DEU 50000 100
+```

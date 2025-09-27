@@ -19,7 +19,6 @@ export function injectGridData() {
         };
         const zoom = parseInt(url.searchParams.get("zoom") || "6");
 
-        // Add 50km buffer in degrees (approximately 0.45 degrees)
         const buffer = 0.45;
         const expandedBounds = {
           north: bounds.north + buffer,
@@ -28,7 +27,6 @@ export function injectGridData() {
           west: bounds.west - buffer,
         };
 
-        // More lenient thresholds to show many more circles
         let minRadius = 200;
         if (zoom <= 6) minRadius = 5000;
         else if (zoom <= 7) minRadius = 3000;
@@ -40,19 +38,22 @@ export function injectGridData() {
         try {
           const cells = await db
             .select({
-              lat: gridCellSchema.latitude,
-              lng: gridCellSchema.longitude,
-              radius: gridCellSchema.radius,
+              lat: sql<number>`ST_Y(${gridCellSchema.center})`,
+              lng: sql<number>`ST_X(${gridCellSchema.center})`,
+              radius: gridCellSchema.radiusMeters,
             })
             .from(gridCellSchema).where(sql`
-              latitude BETWEEN ${expandedBounds.south} AND ${expandedBounds.north}
-              AND longitude BETWEEN ${expandedBounds.west} AND ${expandedBounds.east}
-              AND radius >= ${minRadius}
-            `);
+        ST_Intersects(
+          ${gridCellSchema.center},
+          ST_MakeEnvelope(${expandedBounds.west}, ${expandedBounds.south}, 
+                         ${expandedBounds.east}, ${expandedBounds.north}, 4326)
+        )
+        AND ${gridCellSchema.radiusMeters} >= ${minRadius}
+      `);
 
           const gridData = cells.map((cell) => ({
-            lat: parseFloat(cell.lat),
-            lng: parseFloat(cell.lng),
+            lat: cell.lat,
+            lng: cell.lng,
             radius: cell.radius,
           }));
 

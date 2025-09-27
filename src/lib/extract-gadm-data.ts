@@ -67,7 +67,6 @@ async function downloadGADMZip(): Promise<void> {
   });
 
   await pipeline(response.body, progressTransform, createWriteStream(ZIP_PATH));
-
   downloadBar.stop();
 }
 
@@ -75,7 +74,6 @@ async function extractGADMZip(): Promise<void> {
   if (existsSync(GPKG_PATH)) return;
 
   console.log("Extracting GADM data...");
-
   const zipSize = statSync(ZIP_PATH).size;
   let extractedSize = 0;
 
@@ -105,7 +103,6 @@ async function extractGADMZip(): Promise<void> {
     extractTransform,
     Extract({ path: "." })
   );
-
   extractBar.stop();
 }
 
@@ -147,7 +144,6 @@ async function seedSubdivisions(isoA3?: string): Promise<void> {
 
     const recordIsoA3 = values.GID_0.toString();
 
-    // Skip if filtering by ISO and this record doesn't match
     if (isoA3 && recordIsoA3 !== isoA3) {
       processedRecords++;
       subdivisionsBar.update(processedRecords);
@@ -183,11 +179,9 @@ async function seedSubdivisions(isoA3?: string): Promise<void> {
   }
 
   subdivisionsBar.stop();
-
   if (isoA3) {
     console.log(`Processed ${filteredRecords} subdivisions for ${isoA3}`);
   }
-
   geoPackage.close();
 }
 
@@ -228,11 +222,12 @@ async function createCountriesFromSubdivisions(isoA3?: string): Promise<void> {
       .values({
         name: country.country_name,
         isoA3: country.iso_a3,
+        // Use ST_Union without ST_Multi since geometry type is now generic
         geometry: sql`(
-        SELECT ST_Multi(ST_Union(geometry))
-        FROM gadm_subdivisions 
-        WHERE iso_a3 = ${country.iso_a3}
-      )`,
+          SELECT ST_Union(geometry)
+          FROM gadm_subdivisions 
+          WHERE iso_a3 = ${country.iso_a3}
+        )`,
       })
       .onConflictDoNothing();
 

@@ -1,387 +1,267 @@
 import os
+import math
 import psycopg2
 import numpy as np
-from scipy.spatial.distance import cdist
-from shapely.geometry import Point, Polygon
-from shapely.ops import transform
+from shapely.geometry import Point
 from shapely import wkt
-import geopandas as gpd
 from typing import List, Tuple, Optional
-import json
-import sys
+from dataclasses import dataclass
 from dotenv import load_dotenv
 
 load_dotenv()
 
+@dataclass
+class GridConfig:
+    country_code: str
+    max_radius: int = 50000
+    min_radius: int = 100
+    batch_size: int = 1000
 
-class OptimalCirclePackingGrid:
+class GeometryManager:
     def __init__(self, country_code: str):
         self.country_code = country_code
         self.conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-        self.country_boundary = self._get_country_boundary()
+        self._boundary = None
 
-    def _get_country_boundary(self):
-        """Get country boundary from PostGIS"""
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT ST_AsText(geometry) 
-                FROM countries 
-                WHERE iso_a3 = %s
-            """,
-                (self.country_code,),
-            )
-            result = cur.fetchone()
-            if not result:
-                raise ValueError(f"Country {self.country_code} not found")
-            return wkt.loads(result[0])
+    @property
+    def boundary(self):
+        if self._boundary is None:
+            with self.conn.cursor() as cur:
+                cur.execute("SELECT ST_AsText(geometry) FROM countries WHERE iso_a3 = %s", (self.country_code,))
+                result = cur.fetchone()
+                if not result:
+                    raise ValueError(f"Country {self.country_code} not found")
+                self._boundary = wkt.loads(result[0])
+        return self._boundary
 
-    def _clear_existing_grid(self):
-        """Clear existing grid cells"""
+    def get_bounds(self) -> Tuple[float, float, float, float]:
+        return self.boundary.bounds
+
+    def contains_circle(self, x: float, y: float, radius_deg: float) -> bool:
+        circle = Point(x, y).buffer(radius_deg)
+        return self.boundary.contains(circle)
+
+    @staticmethod
+    def meters_to_degrees(meters: float, lat: float) -> float:
+        return meters / (111320 * math.cos(math.radians(lat)))
+
+class DatabaseManager:
+    def __init__(self, connection, country_code: str):
+        self.conn = connection
+        self.country_code = country_code
+
+    def clear_grid(self):
         with self.conn.cursor() as cur:
             cur.execute("DELETE FROM grid_cell")
             self.conn.commit()
-        print("Cleared existing grid")
 
-    def _get_country_bounds(self) -> Tuple[float, float, float, float]:
-        """Get bounding box of country"""
-        bounds = self.country_boundary.bounds
-        return bounds
-
-    def _meters_to_degrees(self, meters: float, lat: float) -> float:
-        """Convert meters to degrees at given latitude"""
-        earth_radius = 6378137.0
-        deg_per_meter = 1.0 / (earth_radius * np.pi / 180.0)
-        lat_correction = np.cos(np.radians(lat))
-        return meters * deg_per_meter / lat_correction
-
-    def _point_in_country(self, x: float, y: float) -> bool:
-        """Check if point is within country boundary"""
-        point = Point(x, y)
-        return self.country_boundary.contains(point)
-
-    def _circle_conflicts_with_existing(
-        self, x: float, y: float, radius_meters: int
-    ) -> bool:
-        """Check if circle conflicts with existing circles in database"""
+    def find_largest_gap(self, min_radius: int, max_radius: int) -> Optional[int]:
+        """Find the largest radius that can fit in the biggest uncovered gap"""
         with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT EXISTS(
-                    SELECT 1 FROM grid_cell g
-                    WHERE ST_DWithin(
-                        ST_Point(%s, %s, 4326)::geography,
-                        ST_Centroid(g.circle_geometry)::geography,
-                        %s + g.radius
-                    )
-                )
-            """,
-                (x, y, radius_meters),
-            )
-            return cur.fetchone()[0]
-
-    def _find_largest_possible_radius(
-        self, min_radius: int = 100, max_radius: int = 50000
-    ) -> Optional[int]:
-        """Binary search to find the largest radius that can place at least one circle"""
-        print(
-            f"Finding largest possible radius between {min_radius}m and {max_radius}m..."
-        )
-
-        left, right = min_radius, max_radius
-        best_radius = None
-
-        while left <= right:
-            mid = (left + right) // 2
-
-            # Test if we can place at least one circle with this radius
-            test_circles = self._pack_circles_systematic(mid, max_circles=1)
-
-            if test_circles:
-                print(f"  ✓ {mid}m: possible")
-                best_radius = mid
-                left = mid + 1  # Try larger
-            else:
-                print(f"  ✗ {mid}m: too large")
-                right = mid - 1  # Try smaller
-
-        if best_radius:
-            print(f"Largest possible radius: {best_radius}m")
-        else:
-            print("No valid radius found in range")
-
-        return best_radius
-
-    def _pack_circles_systematic(
-        self, radius_meters: int, max_circles: Optional[int] = None
-    ) -> List[Tuple[float, float]]:
-        """Pack circles systematically with grid sampling + random fill"""
-        minx, miny, maxx, maxy = self._get_country_bounds()
-
-        center_lat = (miny + maxy) / 2
-        radius_deg = self._meters_to_degrees(radius_meters, center_lat)
-
-        # Grid spacing slightly less than optimal for better packing
-        grid_spacing = radius_deg * 1.8
-
-        x_points = np.arange(minx + radius_deg, maxx - radius_deg, grid_spacing)
-        y_points = np.arange(miny + radius_deg, maxy - radius_deg, grid_spacing)
-
-        circles = []
-
-        # Systematic grid sampling
-        for i, x in enumerate(x_points):
-            if max_circles and len(circles) >= max_circles:
-                break
-
-            for y in y_points:
-                if max_circles and len(circles) >= max_circles:
-                    break
-
-                if self._can_place_circle(x, y, radius_meters, radius_deg, circles):
-                    circles.append((x, y))
-
-        # Random sampling to fill gaps (if not limited to max_circles)
-        if not max_circles or len(circles) < max_circles:
-            random_attempts = (
-                5000 if not max_circles else min(100, max_circles - len(circles))
-            )
-
-            for _ in range(random_attempts):
-                if max_circles and len(circles) >= max_circles:
-                    break
-
-                x = np.random.uniform(minx + radius_deg, maxx - radius_deg)
-                y = np.random.uniform(miny + radius_deg, maxy - radius_deg)
-
-                if self._can_place_circle(x, y, radius_meters, radius_deg, circles):
-                    circles.append((x, y))
-
-        return circles
-
-    def _can_place_circle(
-        self,
-        x: float,
-        y: float,
-        radius_meters: int,
-        radius_deg: float,
-        existing_circles: List[Tuple[float, float]],
-    ) -> bool:
-        """Check if a circle can be placed at given position"""
-        # Check if point is in country
-        if not self._point_in_country(x, y):
-            return False
-
-        # Check if circle fits entirely within country
-        circle = Point(x, y).buffer(radius_deg)
-        if not self.country_boundary.contains(circle):
-            return False
-
-        # Check conflicts with existing database circles
-        if self._circle_conflicts_with_existing(x, y, radius_meters):
-            return False
-
-        # Check conflicts with circles in current batch
-        if existing_circles:
-            existing_points = np.array(existing_circles)
-            distances = cdist([[x, y]], existing_points)[0]
-            min_distance = 2 * radius_deg
-
-            if np.any(distances < min_distance):
-                return False
-
-        return True
-
-    def _get_uncovered_sample_points(
-        self, radius_meters: int
-    ) -> List[Tuple[float, float]]:
-        """Get sample points in uncovered areas"""
-        minx, miny, maxx, maxy = self._get_country_bounds()
-
-        # Sample resolution based on radius
-        sample_resolution = self._meters_to_degrees(
-            radius_meters * 0.5, (miny + maxy) / 2
-        )
-
-        x_points = np.arange(minx, maxx, sample_resolution)
-        y_points = np.arange(miny, maxy, sample_resolution)
-
-        uncovered_points = []
-
-        print(f"Sampling for uncovered areas (resolution: {sample_resolution:.6f}°)...")
-
-        for i, x in enumerate(x_points):
-            if i % max(1, len(x_points) // 20) == 0:
-                print(f"  Progress: {i/len(x_points)*100:.1f}%")
-
-            for y in y_points:
-                if not self._point_in_country(x, y):
-                    continue
-
-                # Check if point is covered by existing circles
-                with self.conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT EXISTS(
-                            SELECT 1 FROM grid_cell g
-                            WHERE ST_DWithin(
-                                ST_Point(%s, %s, 4326)::geography,
-                                ST_Centroid(g.circle_geometry)::geography,
-                                g.radius
-                            )
+            cur.execute("""
+                WITH country_bounds AS (
+                    SELECT ST_XMin(geometry) as minx, ST_YMin(geometry) as miny,
+                           ST_XMax(geometry) as maxx, ST_YMax(geometry) as maxy
+                    FROM countries WHERE iso_a3 = %s
+                ),
+                sample_grid AS (
+                    SELECT 
+                        generate_series(minx, maxx, (maxx-minx)/50) as x,
+                        generate_series(miny, maxy, (maxy-miny)/50) as y
+                    FROM country_bounds
+                ),
+                uncovered_points AS (
+                    SELECT sg.x, sg.y
+                    FROM sample_grid sg, countries c
+                    WHERE c.iso_a3 = %s 
+                    AND ST_Contains(c.geometry, ST_Point(sg.x, sg.y, 4326))
+                    AND NOT EXISTS (
+                        SELECT 1 FROM grid_cell gc
+                        WHERE ST_DWithin(
+                            ST_Point(sg.x, sg.y, 4326)::geography,
+                            ST_Centroid(gc.circle_geometry)::geography,
+                            gc.radius
                         )
-                    """,
-                        (x, y),
                     )
+                ),
+                gap_distances AS (
+                    SELECT up.x, up.y,
+                           COALESCE(MIN(ST_Distance(
+                               ST_Point(up.x, up.y, 4326)::geography,
+                               ST_Centroid(gc.circle_geometry)::geography
+                           ) - gc.radius), %s) as min_distance_to_circle
+                    FROM uncovered_points up
+                    LEFT JOIN grid_cell gc ON true
+                    GROUP BY up.x, up.y
+                )
+                SELECT MAX(min_distance_to_circle) as max_gap
+                FROM gap_distances
+            """, (self.country_code, self.country_code, max_radius))
+            
+            result = cur.fetchone()
+            if result and result[0]:
+                gap_radius = int(result[0] * 0.8)
+                return max(min_radius, min(gap_radius, max_radius))
+            return None
 
-                    is_covered = cur.fetchone()[0]
-                    if not is_covered:
-                        uncovered_points.append((x, y))
+    def check_conflicts_batch(self, points: List[Tuple[float, float]], radius: int) -> List[bool]:
+        if not points:
+            return []
+            
+        with self.conn.cursor() as cur:
+            cur.execute("CREATE TEMP TABLE temp_candidates (x FLOAT, y FLOAT)")
+            cur.executemany("INSERT INTO temp_candidates VALUES (%s, %s)", points)
+            
+            cur.execute("""
+                SELECT tc.x, tc.y,
+                       EXISTS(
+                           SELECT 1 FROM grid_cell g
+                           WHERE ST_DWithin(
+                               ST_Point(tc.x, tc.y, 4326)::geography,
+                               ST_Centroid(g.circle_geometry)::geography,
+                               %s + g.radius
+                           )
+                       ) as has_conflict
+                FROM temp_candidates tc
+                ORDER BY tc.x, tc.y
+            """, (radius,))
+            
+            results = [not row[2] for row in cur.fetchall()]
+            cur.execute("DROP TABLE temp_candidates")
+            return results
 
-        print(f"Found {len(uncovered_points)} uncovered sample points")
-        return uncovered_points
-
-    def _insert_circles(
-        self, circles: List[Tuple[float, float]], radius_meters: int, level: int
-    ):
-        """Insert circles into database"""
+    def insert_circles_batch(self, circles: List[Tuple[float, float]], radius: int, level: int):
         if not circles:
             return
-
-        print(f"Inserting {len(circles)} circles into database...")
-
+            
         with self.conn.cursor() as cur:
-            for i, (x, y) in enumerate(circles):
-                cur.execute(
-                    """
-                    INSERT INTO grid_cell 
-                    (latitude, longitude, radius, circle_geometry, level)
-                    VALUES (%s, %s, %s, 
-                            ST_Buffer(ST_Point(%s, %s, 4326)::geography, %s)::geometry,
-                            %s)
-                """,
-                    (y, x, radius_meters, x, y, radius_meters, level),
-                )
-
-                if (i + 1) % 100 == 0:
-                    print(f"  Inserted {i + 1}/{len(circles)} circles")
-
+            values = [(y, x, radius, level, x, y, radius) for x, y in circles]
+            cur.executemany("""
+                INSERT INTO grid_cell (latitude, longitude, radius, level, circle_geometry)
+                VALUES (%s, %s, %s, %s, ST_Buffer(ST_Point(%s, %s, 4326)::geography, %s)::geometry)
+            """, values)
             self.conn.commit()
-        print(f"Successfully inserted {len(circles)} circles")
 
-    def generate_optimal_coverage_grid(
-        self, start_radius: int = 50000, min_radius: int = 100
-    ):
-        """Generate complete coverage with automatically detected optimal radii"""
-        self._clear_existing_grid()
+class OptimalGridGenerator:
+    def __init__(self, config: GridConfig):
+        self.config = config
+        self.geometry = GeometryManager(config.country_code)
+        self.db = DatabaseManager(self.geometry.conn, config.country_code)
 
-        level = 0
+    def clear_grid(self):
+        print("Clearing existing grid...")
+        self.db.clear_grid()
+        print("Grid cleared")
+
+    def generate_hex_points(self, bounds: Tuple[float, float, float, float], radius_deg: float) -> List[Tuple[float, float]]:
+        minx, miny, maxx, maxy = bounds
+        dx = radius_deg * 2
+        dy = radius_deg * math.sqrt(3)
+        
+        points = []
+        y = miny + radius_deg
+        row = 0
+        
+        while y <= maxy - radius_deg:
+            x_start = minx + radius_deg + (dx / 2 if row % 2 == 1 else 0)
+            x = x_start
+            while x <= maxx - radius_deg:
+                points.append((x, y))
+                x += dx
+            y += dy
+            row += 1
+            
+        return points
+
+    def generate_level(self, radius: int, level: int) -> int:
+        bounds = self.geometry.get_bounds()
+        avg_lat = (bounds[1] + bounds[3]) / 2
+        radius_deg = self.geometry.meters_to_degrees(radius, avg_lat)
+        
+        candidates = self.generate_hex_points(bounds, radius_deg)
+        valid_candidates = [
+            (x, y) for x, y in candidates
+            if self.geometry.contains_circle(x, y, radius_deg)
+        ]
+        
+        if not valid_candidates:
+            return 0
+        
+        total_placed = 0
+        for i in range(0, len(valid_candidates), self.config.batch_size):
+            batch = valid_candidates[i:i + self.config.batch_size]
+            conflict_results = self.db.check_conflicts_batch(batch, radius)
+            valid_batch = [point for point, is_valid in zip(batch, conflict_results) if is_valid]
+            
+            if valid_batch:
+                self.db.insert_circles_batch(valid_batch, radius, level)
+                total_placed += len(valid_batch)
+        
+        return total_placed
+
+    def calculate_initial_radius(self) -> int:
+        bounds = self.geometry.get_bounds()
+        width_deg = bounds[2] - bounds[0]
+        height_deg = bounds[3] - bounds[1]
+        avg_lat = (bounds[1] + bounds[3]) / 2
+        
+        width_m = width_deg * 111320 * math.cos(math.radians(avg_lat))
+        height_m = height_deg * 111320
+        return min(int(min(width_m, height_m) / 4), self.config.max_radius)
+
+    def generate_complete_grid(self) -> int:
+        current_radius = self.calculate_initial_radius()
         total_circles = 0
-        current_max_radius = start_radius
-
-        print(
-            f"Generating optimal coverage grid: starting at {start_radius}m, minimum {min_radius}m"
-        )
-
-        while current_max_radius >= min_radius:
-            print(f"\n--- Level {level} ---")
-
-            # Find the largest possible radius for this level
-            optimal_radius = self._find_largest_possible_radius(
-                min_radius=min_radius, max_radius=current_max_radius
-            )
-
-            if not optimal_radius:
-                print("No more circles can be placed")
-                break
-
-            print(f"Packing circles with radius {optimal_radius}m...")
-
-            if level == 0:
-                # First level: full systematic packing
-                circles = self._pack_circles_systematic(optimal_radius)
+        level = 0
+        
+        while current_radius >= self.config.min_radius:
+            placed = self.generate_level(current_radius, level)
+            total_circles += placed
+            print(f"Level {level} (radius {current_radius}m): {placed} circles (total: {total_circles})")
+            
+            if placed == 0:
+                current_radius = max(self.config.min_radius, current_radius // 2)
             else:
-                # Check for uncovered areas and focus there
-                uncovered_points = self._get_uncovered_sample_points(optimal_radius)
-
-                if uncovered_points:
-                    # Focus on uncovered areas
-                    circles = []
-                    center_lat = (
-                        self.country_boundary.bounds[1]
-                        + self.country_boundary.bounds[3]
-                    ) / 2
-                    radius_deg = self._meters_to_degrees(optimal_radius, center_lat)
-
-                    for x, y in uncovered_points:
-                        if self._can_place_circle(
-                            x, y, optimal_radius, radius_deg, circles
-                        ):
-                            circles.append((x, y))
-
-                            # Don't check every single point if we have many
-                            if len(circles) > 1000:
-                                break
+                next_radius = self.db.find_largest_gap(self.config.min_radius, current_radius - 50)
+                if next_radius is None or next_radius >= current_radius:
+                    current_radius = max(self.config.min_radius, current_radius - 100)
                 else:
-                    # No specific uncovered points, try systematic approach
-                    circles = self._pack_circles_systematic(optimal_radius)
-
-            if circles:
-                self._insert_circles(circles, optimal_radius, level)
-                total_circles += len(circles)
-                print(
-                    f"Level {level} complete: {len(circles)} circles (total: {total_circles})"
-                )
-
-                # Set next max radius to be smaller than current
-                current_max_radius = optimal_radius - 1
-            else:
-                print(f"No circles could be placed at radius {optimal_radius}m")
-                # Reduce max radius more aggressively
-                current_max_radius = optimal_radius // 2
-
+                    current_radius = next_radius
+                    
             level += 1
-
-            # Safety limit
-            if level > 50:
+            
+            if level > 100:
                 print("Maximum levels reached")
                 break
-
-        print(f"\nOptimal coverage grid generation finished!")
-        print(f"Total circles: {total_circles} across {level} levels")
+        
         return total_circles
 
     def close(self):
-        """Close database connection"""
-        self.conn.close()
-
+        self.geometry.conn.close()
 
 def main():
+    import sys
+    
     if len(sys.argv) < 2:
-        print(
-            "Usage: python generate_grid.py <country_code> [start_radius] [min_radius]"
-        )
+        print("Usage: python generate_grid.py <country_code>")
         sys.exit(1)
-
-    country_code = sys.argv[1]
-    start_radius = int(sys.argv[2]) if len(sys.argv) > 2 else 50000
-    min_radius = int(sys.argv[3]) if len(sys.argv) > 3 else 100
-
-    generator = OptimalCirclePackingGrid(country_code)
-    generator._clear_existing_grid()
-
+    
+    config = GridConfig(
+        country_code=sys.argv[1],
+        max_radius=int(sys.argv[2]) if len(sys.argv) > 2 else 50000,
+        min_radius=int(sys.argv[3]) if len(sys.argv) > 3 else 100
+    )
+    
+    generator = OptimalGridGenerator(config)
+    generator.clear_grid()
+    
     try:
-        total_circles = generator.generate_optimal_coverage_grid(
-            start_radius, min_radius
-        )
-        print(f"\nSuccess: Generated {total_circles} circles for {country_code}")
-        return {"success": True, "circles": total_circles}
+        total = generator.generate_complete_grid()
+        print(f"Success: {total} circles for {config.country_code}")
     except Exception as e:
         print(f"Error: {e}")
-        return {"success": False, "error": str(e)}
     finally:
         generator.close()
 
-
 if __name__ == "__main__":
-    result = main()
+    main()

@@ -1,5 +1,5 @@
 {
-  "id": "5fd2bd73-8deb-4eae-94d0-234df43bba33",
+  "id": "b4343825-487f-4ec5-9106-421d00d82e59",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -46,7 +46,7 @@
         },
         "rating": {
           "name": "rating",
-          "type": "numeric(3, 2)",
+          "type": "double precision",
           "primaryKey": false,
           "notNull": false
         },
@@ -57,15 +57,9 @@
           "notNull": false,
           "default": 0
         },
-        "latitude": {
-          "name": "latitude",
-          "type": "numeric(10, 8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "longitude": {
-          "name": "longitude",
-          "type": "numeric(11, 8)",
+        "location": {
+          "name": "location",
+          "type": "geometry(Point, 4326)",
           "primaryKey": false,
           "notNull": true
         },
@@ -178,17 +172,11 @@
           "method": "btree",
           "with": {}
         },
-        "idx_location": {
-          "name": "idx_location",
+        "idx_location_gist": {
+          "name": "idx_location_gist",
           "columns": [
             {
-              "expression": "latitude",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "longitude",
+              "expression": "location",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -196,7 +184,7 @@
           ],
           "isUnique": true,
           "concurrently": false,
-          "method": "btree",
+          "method": "gist",
           "with": {}
         }
       },
@@ -239,7 +227,7 @@
         },
         "geometry": {
           "name": "geometry",
-          "type": "geometry(MultiPolygon, 4326)",
+          "type": "geometry(Geometry, 4326)",
           "primaryKey": false,
           "notNull": true
         }
@@ -290,7 +278,7 @@
         },
         "geometry": {
           "name": "geometry",
-          "type": "geometry(MultiPolygon, 4326)",
+          "type": "geometry(Geometry, 4326)",
           "primaryKey": false,
           "notNull": true
         }
@@ -321,27 +309,21 @@
           "primaryKey": true,
           "notNull": true
         },
-        "latitude": {
-          "name": "latitude",
-          "type": "numeric(10, 8)",
+        "center": {
+          "name": "center",
+          "type": "geometry(Point, 4326)",
           "primaryKey": false,
           "notNull": true
         },
-        "longitude": {
-          "name": "longitude",
-          "type": "numeric(11, 8)",
+        "radius_meters": {
+          "name": "radius_meters",
+          "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },
-        "radius": {
-          "name": "radius",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "circle_geometry": {
-          "name": "circle_geometry",
-          "type": "geometry(Polygon, 4326)",
+        "circle": {
+          "name": "circle",
+          "type": "geometry(Geometry, 4326)",
           "primaryKey": false,
           "notNull": true
         },
@@ -393,7 +375,38 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_grid_center_gist": {
+          "name": "idx_grid_center_gist",
+          "columns": [
+            {
+              "expression": "center",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        },
+        "idx_grid_circle_gist": {
+          "name": "idx_grid_circle_gist",
+          "columns": [
+            {
+              "expression": "circle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

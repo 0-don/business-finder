@@ -5,10 +5,9 @@ CREATE TABLE "business" (
 	"address" text NOT NULL,
 	"vicinity" text,
 	"formatted_address" text,
-	"rating" numeric(3, 2),
+	"rating" double precision,
 	"user_ratings_total" integer DEFAULT 0,
-	"latitude" numeric(10, 8) NOT NULL,
-	"longitude" numeric(11, 8) NOT NULL,
+	"location" geometry(Point, 4326) NOT NULL,
 	"business_status" text,
 	"types" jsonb,
 	"opening_hours" jsonb,
@@ -31,7 +30,7 @@ CREATE TABLE "countries" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar(256) NOT NULL,
 	"iso_a3" varchar(3) NOT NULL,
-	"geometry" geometry(MultiPolygon, 4326) NOT NULL,
+	"geometry" geometry(Geometry, 4326) NOT NULL,
 	CONSTRAINT "countries_iso_a3_unique" UNIQUE("iso_a3")
 );
 --> statement-breakpoint
@@ -40,16 +39,15 @@ CREATE TABLE "gadm_subdivisions" (
 	"uid" integer NOT NULL,
 	"country_name" varchar(256) NOT NULL,
 	"iso_a3" varchar(3) NOT NULL,
-	"geometry" geometry(MultiPolygon, 4326) NOT NULL,
+	"geometry" geometry(Geometry, 4326) NOT NULL,
 	CONSTRAINT "gadm_subdivisions_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
 CREATE TABLE "grid_cell" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"latitude" numeric(10, 8) NOT NULL,
-	"longitude" numeric(11, 8) NOT NULL,
-	"radius" integer NOT NULL,
-	"circle_geometry" geometry(Polygon, 4326) NOT NULL,
+	"center" geometry(Point, 4326) NOT NULL,
+	"radius_meters" double precision NOT NULL,
+	"circle" geometry(Geometry, 4326) NOT NULL,
 	"level" integer NOT NULL,
 	"is_processed" boolean DEFAULT false,
 	"current_page" integer DEFAULT 0,
@@ -60,4 +58,6 @@ CREATE TABLE "grid_cell" (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX "idx_place_id" ON "business" USING btree ("place_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_location" ON "business" USING btree ("latitude","longitude");
+CREATE UNIQUE INDEX "idx_location_gist" ON "business" USING gist ("location");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_grid_center_gist" ON "grid_cell" USING gist ("center");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_grid_circle_gist" ON "grid_cell" USING gist ("circle");
