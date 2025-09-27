@@ -67,7 +67,7 @@ CREATE TABLE "settings" (
 	"country_code" "country_code" NOT NULL,
 	"language" "language" NOT NULL,
 	"place_type" "place_type" NOT NULL,
-	"keywords" text NOT NULL,
+	"keywords" text[] NOT NULL,
 	"max_radius" double precision DEFAULT 50000,
 	"min_radius" double precision DEFAULT 100,
 	"is_active" boolean DEFAULT true,

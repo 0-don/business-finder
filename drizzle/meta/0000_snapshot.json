@@ -1,5 +1,5 @@
 {
-  "id": "c2ddcbdf-2238-405b-8c16-f4c05edde04b",
+  "id": "d0c040cc-4645-456f-b3fb-e4ce302c6656",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -491,7 +491,7 @@
         },
         "keywords": {
           "name": "keywords",
-          "type": "text",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": true
         },
