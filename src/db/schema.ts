@@ -2,6 +2,7 @@ import {
   boolean,
   customType,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -50,7 +51,7 @@ export const businessSchema = pgTable(
     formattedAddress: text("formatted_address"),
     rating: doublePrecision("rating"),
     userRatingsTotal: integer("user_ratings_total").default(0),
-    location: point("location").notNull(), // Single point geometry instead of lat/lng
+    location: point("location").notNull(),
     businessStatus: text("business_status"),
     types: jsonb("types").$type<string[]>(),
     openingHours: jsonb("opening_hours"),
@@ -71,7 +72,8 @@ export const businessSchema = pgTable(
   },
   (table) => [
     uniqueIndex("idx_place_id").on(table.placeId),
-    uniqueIndex("idx_location_gist").using("gist", table.location),
+    // Changed from uniqueIndex to regular index for GiST
+    index("idx_location_gist").using("gist", table.location),
   ]
 );
 
@@ -79,9 +81,9 @@ export const gridCellSchema = pgTable(
   "grid_cell",
   {
     id: serial("id").primaryKey(),
-    center: point("center").notNull(), // Point geometry instead of lat/lng
-    radiusMeters: doublePrecision("radius_meters").notNull(), // Use double for precision
-    circle: geometry("circle").notNull(), // Circle geometry
+    center: point("center").notNull(),
+    radiusMeters: doublePrecision("radius_meters").notNull(),
+    circle: geometry("circle").notNull(),
     level: integer("level").notNull(),
     isProcessed: boolean("is_processed").default(false),
     currentPage: integer("current_page").default(0),
@@ -93,7 +95,8 @@ export const gridCellSchema = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("idx_grid_center_gist").using("gist", table.center),
-    uniqueIndex("idx_grid_circle_gist").using("gist", table.circle),
+    // Changed from uniqueIndex to regular index for GiST
+    index("idx_grid_center_gist").using("gist", table.center),
+    index("idx_grid_circle_gist").using("gist", table.circle),
   ]
 );

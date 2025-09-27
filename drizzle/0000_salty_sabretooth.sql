@@ -58,6 +58,6 @@ CREATE TABLE "grid_cell" (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX "idx_place_id" ON "business" USING btree ("place_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_location_gist" ON "business" USING gist ("location");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_grid_center_gist" ON "grid_cell" USING gist ("center");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_grid_circle_gist" ON "grid_cell" USING gist ("circle");
+CREATE INDEX "idx_location_gist" ON "business" USING gist ("location");--> statement-breakpoint
+CREATE INDEX "idx_grid_center_gist" ON "grid_cell" USING gist ("center");--> statement-breakpoint
+CREATE INDEX "idx_grid_circle_gist" ON "grid_cell" USING gist ("circle");

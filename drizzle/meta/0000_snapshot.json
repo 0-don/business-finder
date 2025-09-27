@@ -1,5 +1,5 @@
 {
-  "id": "b4343825-487f-4ec5-9106-421d00d82e59",
+  "id": "2117be01-2432-4b28-a96b-86ee4d467307",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -182,7 +182,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "gist",
           "with": {}
@@ -386,7 +386,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "gist",
           "with": {}
@@ -401,7 +401,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "gist",
           "with": {}
