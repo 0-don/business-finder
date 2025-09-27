@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";
 import { db } from "./src/db/index.js";
 import { gridCellSchema } from "./src/db/schema.js";
-import { GridManager } from "./src/lib/grid-manager.js";
+import { COUNTRY_CODE } from "./src/lib/constants.js";
+import { getCountryGeometry } from "./src/lib/geometry.js";
 
 export function injectGridData() {
   return {
@@ -67,8 +68,7 @@ export function injectGridData() {
       });
     },
     transformIndexHtml: async (html: string) => {
-      const gridManager = new GridManager("DEU");
-      const geometry = await gridManager.getCountryGeometry();
+      const geometry = await getCountryGeometry(COUNTRY_CODE);
 
       return html
         .replace("`{{GRID_DATA}}`", "[]")

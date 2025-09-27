@@ -1,8 +1,11 @@
 import "@dotenvx/dotenvx/config";
-import { GridManager } from "./lib/grid-manager";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
+import { COUNTRY_CODE } from "./lib/constants";
+import { generateCountryGrid } from "./lib/hex-grid-generator";
 
-const gridManager = new GridManager("DEU");
-
+await db.execute(sql`DELETE FROM grid_cell`);
+await generateCountryGrid(COUNTRY_CODE);
 // await gridManager.clearGrid();
 // await gridManager.initializeCountryGrid();
 // await gridManager.showLevelStats();
