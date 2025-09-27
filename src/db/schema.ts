@@ -1,10 +1,17 @@
 import {
+  Language,
+  PlaceType1,
+  PlaceType2,
+} from "@googlemaps/google-maps-services-js";
+import { relations } from "drizzle-orm";
+import {
   boolean,
   customType,
   doublePrecision,
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   serial,
   text,
@@ -12,7 +19,19 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
+import { COUNTRY_CODES } from "../lib/constants";
 
+export const countryCodeEnum = pgEnum("country_code", COUNTRY_CODES);
+export const languageEnum = pgEnum(
+  "language",
+  Object.values(Language) as [Language, ...Language[]]
+);
+export const placeTypeEnum = pgEnum("place_type", [
+  ...Object.values(PlaceType1),
+  ...Object.values(PlaceType2),
+] as [PlaceType1 | PlaceType2, ...(PlaceType1 | PlaceType2)[]]);
+
+// Custom geometry types
 const geometry = customType<{ data: string }>({
   dataType() {
     return "geometry(Geometry, 4326)";
@@ -24,6 +43,34 @@ const point = customType<{ data: string }>({
     return "geometry(Point, 4326)";
   },
 });
+
+// Settings schema
+export const settingsSchema = pgTable(
+  "settings",
+  {
+    id: serial("id").primaryKey(),
+    countryCode: countryCodeEnum("country_code").notNull(),
+    language: languageEnum("language").notNull(),
+    placeType: placeTypeEnum("place_type").notNull(),
+    keywords: text("keywords").notNull(),
+    maxRadius: doublePrecision("max_radius").default(50000),
+    minRadius: doublePrecision("min_radius").default(100),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("idx_settings_unique_config").on(
+      table.countryCode,
+      table.language,
+      table.placeType,
+      table.keywords
+    ),
+    index("idx_settings_active_lookup").on(table.countryCode, table.isActive),
+  ]
+);
 
 export const gadmSubdivisions = pgTable("gadm_subdivisions", {
   id: serial("id").primaryKey(),
@@ -65,6 +112,7 @@ export const businessSchema = pgTable(
     phoneNumber: text("phone_number"),
     internationalPhoneNumber: text("international_phone_number"),
     utcOffset: integer("utc_offset"),
+    countryCode: countryCodeEnum("country_code").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -72,8 +120,8 @@ export const businessSchema = pgTable(
   },
   (table) => [
     uniqueIndex("idx_place_id").on(table.placeId),
-    // Changed from uniqueIndex to regular index for GiST
     index("idx_location_gist").using("gist", table.location),
+    index("idx_business_country").on(table.countryCode),
   ]
 );
 
@@ -89,14 +137,35 @@ export const gridCellSchema = pgTable(
     currentPage: integer("current_page").default(0),
     nextPageToken: text("next_page_token"),
     totalResults: integer("total_results").default(0),
+    countryCode: countryCodeEnum("country_code").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Changed from uniqueIndex to regular index for GiST
     index("idx_grid_center_gist").using("gist", table.center),
     index("idx_grid_circle_gist").using("gist", table.circle),
+    index("idx_grid_country").on(table.countryCode),
   ]
 );
+
+// Relations
+export const settingsRelations = relations(settingsSchema, ({ many }) => ({
+  businesses: many(businessSchema),
+  gridCells: many(gridCellSchema),
+}));
+
+export const businessRelations = relations(businessSchema, ({ one }) => ({
+  settings: one(settingsSchema, {
+    fields: [businessSchema.countryCode],
+    references: [settingsSchema.countryCode],
+  }),
+}));
+
+export const gridCellRelations = relations(gridCellSchema, ({ one }) => ({
+  settings: one(settingsSchema, {
+    fields: [gridCellSchema.countryCode],
+    references: [settingsSchema.countryCode],
+  }),
+}));

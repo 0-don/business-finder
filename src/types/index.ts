@@ -16,7 +16,6 @@ export interface Bounds {
   maxY: number;
 }
 
-
 export interface BoundsRow {
   min_x: number;
   min_y: number;
