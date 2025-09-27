@@ -28,7 +28,8 @@ export function conflictUpdateAllExcept<
 }
 
 export async function createPostgreIndexes() {
-   await db.execute(sql`
+  // Countries indexes
+  await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
     ON countries USING GIST (geometry);
   `);
@@ -38,15 +39,10 @@ export async function createPostgreIndexes() {
     ON countries (iso_a3);
   `);
 
-  // Grid cell indexes for the new schema
+  // Grid cell - separate spatial and radius indexes (can't mix in GiST)
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_center_gist 
     ON grid_cell USING GIST (center);
-  `);
-
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_circle_gist 
-    ON grid_cell USING GIST (circle);
   `);
 
   await db.execute(sql`
@@ -54,33 +50,35 @@ export async function createPostgreIndexes() {
     ON grid_cell (radius_meters);
   `);
 
+  // Grid cell - level index for hierarchical queries
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_btree 
     ON grid_cell (level);
   `);
 
-  // Composite index for common query patterns
+  // Grid cell - partial index for unprocessed cells (efficient for background jobs)
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed 
+    ON grid_cell (is_processed) 
+    WHERE is_processed IS FALSE;
+  `);
+
+  // Grid cell - composite index for level + radius combinations
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_radius 
     ON grid_cell (level, radius_meters);
   `);
 
-  // Business location index for the new schema
+  // GADM subdivisions - geometry index for spatial operations
   await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_location_gist 
-    ON business USING GIST (location);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_geometry_gist 
+    ON gadm_subdivisions USING GIST (geometry);
   `);
 
+  // GADM subdivisions - ISO code index for country filtering
   await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_place_id_btree 
-    ON business (place_id);
-  `);
-
-  // Processing status index (if you still need it)
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_processed 
-    ON grid_cell (is_processed) 
-    WHERE is_processed IS FALSE;
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_iso_btree 
+    ON gadm_subdivisions (iso_a3);
   `);
 }
 
