@@ -66,7 +66,7 @@ class DatabaseManager:
         return valid_points
 
     def check_within_country(
-        self, points: List[Tuple[float, float]], radius_deg: float
+        self, points: List[Tuple[float, float]], radius_meters: float
     ) -> List[Tuple[float, float]]:
         if not points:
             return []
@@ -74,13 +74,14 @@ class DatabaseManager:
         boundary_wkt = self.get_country_boundary()
         with self.conn.cursor() as cur:
             for lng, lat in points:
+                # More accurate check using geography type for buffering in meters
                 cur.execute(
                     """
                     SELECT ST_Within(
-                        ST_Buffer(ST_Point(%s, %s, 4326), %s),
+                        ST_Buffer(ST_Point(%s, %s, 4326)::geography, %s)::geometry,
                         ST_GeomFromText(%s, 4326)
                     )""",
-                    (lng, lat, radius_deg, boundary_wkt),
+                    (lng, lat, radius_meters, boundary_wkt),
                 )
                 if cur.fetchone()[0]:
                     valid_points.append((lng, lat))
@@ -128,34 +129,45 @@ class HexGridGenerator:
         self.db = DatabaseManager(config.country_code)
 
     @staticmethod
-    def meters_to_degrees(meters: float, lat: float) -> float:
-        return meters / (111320 * math.cos(math.radians(lat)))
+    def meters_to_degrees_lat(meters: float) -> float:
+        return meters / 111320.0
+
+    @staticmethod
+    def meters_to_degrees_lng(meters: float, lat: float) -> float:
+        return meters / (111320.0 * math.cos(math.radians(lat)))
 
     def generate_hex_candidates(
-        self, bounds: Tuple[float, float, float, float], radius_deg: float
+        self, bounds: Tuple[float, float, float, float], radius_meters: float
     ) -> List[Tuple[float, float]]:
         minx, miny, maxx, maxy = bounds
-        dx = radius_deg * 2.0
-        dy = radius_deg * math.sqrt(3)
         candidates = []
-        y = miny + radius_deg
+        
+        # Vertical distance between rows in degrees (constant)
+        dy_deg = self.meters_to_degrees_lat(radius_meters * math.sqrt(3))
+        
+        y = miny
         row = 0
-        while y <= maxy - radius_deg:
-            x_start = minx + radius_deg + (radius_deg if row % 2 == 1 else 0)
+        while y <= maxy:
+            # Horizontal distance and offset depend on current latitude
+            dx_deg = self.meters_to_degrees_lng(radius_meters * 2, y)
+            radius_deg_lng = self.meters_to_degrees_lng(radius_meters, y)
+            
+            x_start = minx + (radius_deg_lng if row % 2 == 1 else 0)
             x = x_start
-            while x <= maxx - radius_deg:
+            
+            while x <= maxx:
                 candidates.append((x, y))
-                x += dx
-            y += dy
+                x += dx_deg
+            
+            y += dy_deg
             row += 1
+            
         return candidates
 
     def can_place_circles_at_radius(self, radius_meters: int) -> int:
         bounds = self.db.get_bounds()
-        avg_lat = (bounds[1] + bounds[3]) / 2
-        radius_deg = self.meters_to_degrees(radius_meters, avg_lat)
-        candidates = self.generate_hex_candidates(bounds, radius_deg)
-        in_country = self.db.check_within_country(candidates, radius_deg)
+        candidates = self.generate_hex_candidates(bounds, radius_meters)
+        in_country = self.db.check_within_country(candidates, radius_meters)
         return len(self.db.check_no_overlaps(in_country, radius_meters))
 
     def find_optimal_radius(self, max_radius: int) -> Optional[int]:
@@ -169,11 +181,11 @@ class HexGridGenerator:
     def generate_level(self, radius_meters: int, level: int) -> int:
         print(f"Level {level}: radius {radius_meters}m")
         bounds = self.db.get_bounds()
-        avg_lat = (bounds[1] + bounds[3]) / 2
-        radius_deg = self.meters_to_degrees(radius_meters, avg_lat)
-        candidates = self.generate_hex_candidates(bounds, radius_deg)
-        in_country = self.db.check_within_country(candidates, radius_deg)
+        
+        candidates = self.generate_hex_candidates(bounds, radius_meters)
+        in_country = self.db.check_within_country(candidates, radius_meters)
         non_overlapping = self.db.check_no_overlaps(in_country, radius_meters)
+        
         self.db.insert_circles(non_overlapping, radius_meters, level)
         print(f"  Placed {len(non_overlapping)} circles")
         return len(non_overlapping)
@@ -196,8 +208,15 @@ class HexGridGenerator:
             placed = self.generate_level(current_radius, level)
             total_circles += placed
 
-            if placed == 0:
+            if placed == 0 and level > 0: # Avoid getting stuck if first level fails
                 current_radius = max(self.config.min_radius, int(current_radius * 0.5))
+                continue
+            
+            if placed == 0 and level == 0:
+                print("Could not place any circles at the starting radius. Halving and retrying.")
+                current_radius = int(current_radius * 0.5)
+                if current_radius < self.config.min_radius:
+                    break
                 continue
 
             optimal_radius = self.find_optimal_radius(current_radius - 1)
@@ -208,6 +227,7 @@ class HexGridGenerator:
             level += 1
 
             if level > 100:
+                print("Stopping after 100 levels to prevent infinite loop.")
                 break
 
         print(f"Complete! {total_circles} total circles in {level} levels")
