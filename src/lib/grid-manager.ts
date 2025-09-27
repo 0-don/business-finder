@@ -1,3 +1,4 @@
+// src/lib/grid-manager.ts
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { count, eq, sql } from "drizzle-orm";
@@ -7,6 +8,8 @@ import { BoundsResult, ValidPosition } from "../types";
 import { latSpacing } from "./constants";
 
 dayjs.extend(relativeTime);
+
+const BATCH_SIZE = 1000;
 
 export class GridManager {
   countryCode: string;
@@ -22,7 +25,6 @@ export class GridManager {
       })
       .from(gridCellSchema)
       .limit(1);
-
     return result[0]?.maxLevel ?? null;
   }
 
@@ -37,18 +39,16 @@ export class GridManager {
     let startRadius = initialRadius;
 
     if (lastLevel !== null) {
-      // Calculate radius from level: radius = 50000 - (level * 100)
-      startRadius = 50000 - lastLevel * 100 - 100; // Start from next radius
-      console.log(
-        `Resuming from level ${lastLevel + 1}, radius ${startRadius}m`
-      );
+      startRadius = 50000 - lastLevel * 100;
+      console.log(`Resuming from level ${lastLevel}, radius ${startRadius}m`);
     }
 
-    // Only generate radii from where we left off
+    // Generate radii from where we left off, but stop at 200m
+    // No point trying 100m since larger circles should fill all space
     const radii = Array.from(
-      { length: Math.max(0, (startRadius - 100) / 100 + 1) },
+      { length: Math.max(0, (startRadius - 200) / 100 + 1) },
       (_, i) => startRadius - i * 100
-    ).filter((r) => r >= 100); // Ensure we don't go below 100m
+    ).filter((r) => r >= 200);
 
     if (radii.length === 0) {
       console.log("Grid generation complete - all radii processed");
@@ -61,10 +61,15 @@ export class GridManager {
     for (const radius of radii) {
       const placed = await this.processRadiusOptimized(bounds, radius);
       totalPlaced += placed;
-
       console.log(
         `Radius ${radius}m: ${placed} circles (total: ${totalPlaced}) - ${startTime.fromNow()}`
       );
+
+      // Early termination if no circles were placed
+      if (placed === 0 && radius <= 500) {
+        console.log("No more space available - terminating early");
+        break;
+      }
     }
 
     console.log(
@@ -125,16 +130,25 @@ export class GridManager {
 
     if (validPositions.length === 0) return 0;
 
-    const gridCells = validPositions.map((pos) => ({
-      latitude: pos.lat.toString(),
-      longitude: pos.lng.toString(),
-      radius,
-      circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
-      level: Math.floor((50000 - radius) / 100),
-    }));
+    const level = Math.floor((50000 - radius) / 100);
 
-    await db.insert(gridCellSchema).values(gridCells);
-    return validPositions.length;
+    // Process in batches to avoid stack overflow
+    let totalInserted = 0;
+    for (let i = 0; i < validPositions.length; i += BATCH_SIZE) {
+      const batch = validPositions.slice(i, i + BATCH_SIZE);
+      const gridCells = batch.map((pos) => ({
+        latitude: pos.lat.toString(),
+        longitude: pos.lng.toString(),
+        radius,
+        circleGeometry: sql`ST_Buffer(ST_Point(${pos.lng}, ${pos.lat}, 4326)::geography, ${radius})::geometry`,
+        level,
+      }));
+
+      await db.insert(gridCellSchema).values(gridCells);
+      totalInserted += batch.length;
+    }
+
+    return totalInserted;
   }
 
   async getCountryGeometry() {
@@ -145,7 +159,6 @@ export class GridManager {
       .from(countries)
       .where(eq(countries.isoA3, this.countryCode))
       .limit(1);
-
     return result[0]?.geojson ? JSON.parse(result[0].geojson) : null;
   }
 
@@ -160,7 +173,6 @@ export class GridManager {
       .from(countries)
       .where(eq(countries.isoA3, this.countryCode))
       .limit(1);
-
     return result[0]!;
   }
 
