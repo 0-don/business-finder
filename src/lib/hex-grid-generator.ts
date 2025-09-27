@@ -110,7 +110,7 @@ class HexGridGenerator {
     while (y <= bounds.maxY) {
       // Tighter horizontal spacing - reduce from 2.0 to 1.73 (sqrt(3))
       const { lngDeg: dxDeg } = this.metersToDegrees(radius * 1.73, y);
-      const { lngDeg: radiusDegLng } = this.metersToDegrees(radius * 0.866, y); // sqrt(3)/2
+      const { lngDeg: radiusDegLng } = this.metersToDegrees(radius * 0.866, y);
       const xStart = bounds.minX + (row % 2 === 1 ? radiusDegLng : 0);
 
       let x = xStart;
