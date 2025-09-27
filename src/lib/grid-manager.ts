@@ -174,4 +174,23 @@ export class GridManager {
     await db.delete(gridCellSchema);
     console.log("Grid cleared");
   }
+
+  async showLevelStats(): Promise<void> {
+    const stats = await db
+      .select({
+        level: gridCellSchema.level,
+        radius: sql<number>`MIN(radius)`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(gridCellSchema)
+      .groupBy(gridCellSchema.level)
+      .orderBy(gridCellSchema.level);
+
+    console.log("Grid Level Stats:");
+    for (const stat of stats) {
+      console.log(
+        `Level ${stat.level} (Radius: ${stat.radius}m): ${stat.count} circles`
+      );
+    }
+  }
 }

@@ -5,3 +5,4 @@ const gridManager = new GridManager("DEU");
 
 // await gridManager.clearGrid();
 await gridManager.initializeCountryGrid();
+await gridManager.showLevelStats();
