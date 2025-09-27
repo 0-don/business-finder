@@ -1,3 +1,4 @@
+import type { SQL } from "drizzle-orm";
 import type {
   countryCodeEnum,
   languageEnum,
@@ -7,6 +8,13 @@ import type {
 export type CountryCode = (typeof countryCodeEnum.enumValues)[number];
 export type Language = (typeof languageEnum.enumValues)[number];
 export type PlaceType = (typeof placeTypeEnum.enumValues)[number];
+
+export type Subdivision = {
+  uid: number;
+  countryName: string;
+  isoA3: CountryCode;
+  geometry: SQL<unknown>;
+};
 
 export interface SettingsConfig {
   countryCode: CountryCode;
@@ -18,7 +26,7 @@ export interface SettingsConfig {
 }
 
 export interface GridConfig {
-  countryCode: string;
+  countryCode: CountryCode;
   maxRadius: number;
   minRadius: number;
 }

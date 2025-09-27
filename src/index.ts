@@ -1,5 +1,6 @@
 import "@dotenvx/dotenvx/config";
-import { COUNTRY_CODE } from "./lib/constants";
+
+import { DEFAULT_COUNTRY_CODE } from "./lib/constants";
 import { generateCountryGrid } from "./lib/hex-grid-generator";
 
-await generateCountryGrid(COUNTRY_CODE);
+await generateCountryGrid(DEFAULT_COUNTRY_CODE);

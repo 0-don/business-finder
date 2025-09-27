@@ -1,19 +1,14 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
 import cliProgress from "cli-progress";
-import { SQL, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
-
-type Subdivision = {
-  uid: number;
-  countryName: string;
-  isoA3: string;
-  geometry: SQL<unknown>;
-};
+import { CountryCode, Subdivision } from "../types";
+import { DEFAULT_COUNTRY_CODE } from "./constants";
 
 const BATCH_SIZE = 100;
 const ZIP_PATH = "./gadm_410-gpkg.zip";
@@ -21,7 +16,7 @@ const GPKG_PATH = "./gadm_410.gpkg";
 const DOWNLOAD_URL =
   "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
 
-async function checkExistingData(isoA3?: string): Promise<boolean> {
+async function checkExistingData(isoA3?: CountryCode): Promise<boolean> {
   if (isoA3) {
     const existingCountry = await db
       .select()
@@ -153,7 +148,7 @@ async function seedSubdivisions(isoA3?: string): Promise<void> {
     subdivisions.push({
       uid: Number(values.UID),
       countryName: (values.COUNTRY || values.NAME_0)!.toString().trim(),
-      isoA3: recordIsoA3,
+      isoA3: recordIsoA3 as CountryCode,
       geometry: sql`ST_GeomFromText(${geometry.geometry.toWkt()}, 4326)`,
     });
 
@@ -185,7 +180,9 @@ async function seedSubdivisions(isoA3?: string): Promise<void> {
   geoPackage.close();
 }
 
-async function createCountriesFromSubdivisions(isoA3?: string): Promise<void> {
+async function createCountriesFromSubdivisions(
+  isoA3?: CountryCode
+): Promise<void> {
   const message = isoA3
     ? `Creating country ${isoA3} from subdivisions...`
     : "Creating countries from subdivisions...";
@@ -237,7 +234,9 @@ async function createCountriesFromSubdivisions(isoA3?: string): Promise<void> {
   countriesBar.stop();
 }
 
-export async function extractGADMData(isoA3: string = "DEU"): Promise<void> {
+export async function extractGADMData(
+  isoA3: CountryCode = DEFAULT_COUNTRY_CODE
+): Promise<void> {
   if (await checkExistingData(isoA3)) return;
 
   await downloadGADMZip();

@@ -3,14 +3,14 @@ import { db } from "../db";
 import { settingsSchema } from "../db/schema";
 import { CountryCode, Language, PlaceType, SettingsConfig } from "../types";
 import {
-  DEFAULT_COUNTRY,
+  DEFAULT_COUNTRY_CODE,
   DEFAULT_KEYWORDS,
   DEFAULT_LANGUAGE,
   DEFAULT_PLACE_TYPE,
 } from "./constants";
 
 export async function getActiveSettings(
-  countryCode: CountryCode = DEFAULT_COUNTRY,
+  countryCode: CountryCode = DEFAULT_COUNTRY_CODE,
   language: Language = DEFAULT_LANGUAGE,
   placeType: PlaceType = DEFAULT_PLACE_TYPE,
   keywords: string[] = DEFAULT_KEYWORDS

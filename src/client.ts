@@ -1,3 +1,4 @@
+import { Language as GoogleMapsLanguage } from "@googlemaps/google-maps-services-js";
 import { CLIENT } from "./lib/constants";
 import { getActiveSettings } from "./lib/settings";
 
@@ -32,8 +33,8 @@ export async function exponentialBackoff<T>(
   throw lastError!;
 }
 
-export async function getPlaceDetails(placeId: string, countryCode?: string) {
-  const settings = await getActiveSettings(countryCode);
+export async function getPlaceDetails(placeId: string) {
+  const settings = await getActiveSettings();
 
   return exponentialBackoff(async () => {
     const response = await CLIENT.placeDetails({
@@ -46,7 +47,7 @@ export async function getPlaceDetails(placeId: string, countryCode?: string) {
           "opening_hours",
           "utc_offset",
         ],
-        language: settings.language,
+        language: settings.language as GoogleMapsLanguage,
         key: process.env.GOOGLE_PLACES_API!,
       },
     });
@@ -61,10 +62,9 @@ export async function getPlacesNearby(
   lat: number,
   lng: number,
   radius: number,
-  countryCode?: string,
   nextPageToken?: string | null
 ) {
-  const settings = await getActiveSettings(countryCode);
+  const settings = await getActiveSettings();
 
   return await exponentialBackoff(async () => {
     return CLIENT.placesNearby({
@@ -72,8 +72,8 @@ export async function getPlacesNearby(
         location: { lat, lng },
         radius,
         type: settings.placeType,
-        keyword: settings.keywords,
-        language: settings.language,
+        keyword: settings.keywords.join("|"),
+        language: settings.language as GoogleMapsLanguage,
         key: process.env.GOOGLE_PLACES_API!,
         ...(nextPageToken && { pagetoken: nextPageToken }),
       },

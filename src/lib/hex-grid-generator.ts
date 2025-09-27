@@ -3,13 +3,20 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
-import { Bounds, BoundsRow, CoordinateRow, GridConfig, Point } from "../types";
+import {
+  Bounds,
+  BoundsRow,
+  CoordinateRow,
+  CountryCode,
+  GridConfig,
+  Point,
+} from "../types";
 
 dayjs.extend(relativeTime);
 
 class DatabaseManager {
   constructor(
-    private countryCode: string,
+    private countryCode: CountryCode,
     private bounds?: Bounds
   ) {}
 
@@ -26,15 +33,15 @@ class DatabaseManager {
     const valuesSql = candidates.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
 
     const result = (await db.execute(sql`
-    WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
-    SELECT c.lng, c.lat FROM candidates c
-    JOIN countries co ON co.iso_a3 = ${this.countryCode} 
-    WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
-    AND NOT EXISTS (
-      SELECT 1 FROM grid_cell gc
-      WHERE ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
-    )
-  `)) as unknown as CoordinateRow[];
+      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
+      SELECT c.lng, c.lat FROM candidates c
+      JOIN countries co ON co.iso_a3 = ${this.countryCode} 
+      WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
+      AND NOT EXISTS (
+        SELECT 1 FROM grid_cell gc
+        WHERE ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
+      )
+    `)) as unknown as CoordinateRow[];
 
     return result.map((row) => ({ lng: +row.lng, lat: +row.lat }));
   }
@@ -60,10 +67,10 @@ class DatabaseManager {
     if (this.bounds) return this.bounds;
 
     const result = (await db.execute(sql`
-          SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
-                ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
-          FROM countries WHERE iso_a3 = ${this.countryCode}
-        `)) as unknown as BoundsRow[];
+      SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
+            ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
+      FROM countries WHERE iso_a3 = ${this.countryCode}
+    `)) as unknown as BoundsRow[];
 
     if (!result.length) {
       throw new Error(`Country ${this.countryCode} not found in database`);
@@ -219,7 +226,7 @@ class HexGridGenerator {
   }
 }
 
-export const getCountryGeometry = async (countryCode: string) => {
+export const getCountryGeometry = async (countryCode: CountryCode) => {
   const result = await db
     .select({
       geojson: sql<string>`ST_AsGeoJSON(geometry)`,
@@ -232,12 +239,12 @@ export const getCountryGeometry = async (countryCode: string) => {
 };
 
 export async function generateCountryGrid(
-  countryCode: string,
+  countryCode: CountryCode,
   maxRadius = 50000,
   minRadius = 100
 ): Promise<number> {
   const generator = new HexGridGenerator({
-    countryCode: countryCode.toUpperCase(),
+    countryCode,
     maxRadius,
     minRadius,
   });
