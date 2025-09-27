@@ -39,27 +39,23 @@ export function injectGridData() {
         try {
           const cells = await db
             .select({
+              id: gridCellSchema.id,
               lat: sql<number>`ST_Y(${gridCellSchema.center})`,
               lng: sql<number>`ST_X(${gridCellSchema.center})`,
               radius: gridCellSchema.radiusMeters,
             })
             .from(gridCellSchema).where(sql`
-        ST_Intersects(
-          ${gridCellSchema.center},
-          ST_MakeEnvelope(${expandedBounds.west}, ${expandedBounds.south}, 
-                         ${expandedBounds.east}, ${expandedBounds.north}, 4326)
-        )
-        AND ${gridCellSchema.radiusMeters} >= ${minRadius}
-      `);
+              ST_Intersects(
+                ${gridCellSchema.center},
+                ST_MakeEnvelope(${expandedBounds.west}, ${expandedBounds.south}, 
+                              ${expandedBounds.east}, ${expandedBounds.north}, 4326)
+              )
+              AND ${gridCellSchema.radiusMeters} >= ${minRadius}
+          `);
 
-          const gridData = cells.map((cell) => ({
-            lat: cell.lat,
-            lng: cell.lng,
-            radius: cell.radius,
-          }));
-
+    
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify(gridData));
+          res.end(JSON.stringify(cells));
         } catch (error) {
           console.error("Error fetching grid cells:", error);
           res.statusCode = 500;
