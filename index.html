@@ -34,6 +34,8 @@
       let clickedPoints = [];
       let distanceLine = null;
       let markers = [];
+      let currentCircles = [];
+      let isLoading = false;
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
@@ -43,6 +45,7 @@
         });
 
         map.addListener("click", handleMapClick);
+        map.addListener("idle", loadGridCells);
 
         const geometry = {
           type: "FeatureCollection",
@@ -60,22 +63,57 @@
           strokeWeight: 3,
           strokeOpacity: 1,
           fillOpacity: 0,
-          clickable: false, // Make country borders non-clickable
+          clickable: false,
         });
 
-        const gridData = `{{GRID_DATA}}`;
-        gridData.forEach(
-          (cell) =>
-            new google.maps.Circle({
+        loadGridCells();
+      }
+
+      async function loadGridCells() {
+        if (isLoading) return;
+        isLoading = true;
+
+        const bounds = map.getBounds();
+        const zoom = map.getZoom();
+
+        if (!bounds) {
+          isLoading = false;
+          return;
+        }
+
+        const ne = bounds.getNorthEast();
+        const sw = bounds.getSouthWest();
+
+        try {
+          const response = await fetch(
+            `/api/grid-cells?north=${ne.lat()}&south=${sw.lat()}&east=${ne.lng()}&west=${sw.lng()}&zoom=${zoom}`
+          );
+
+          if (!response.ok) throw new Error("Failed to fetch grid cells");
+
+          const gridData = await response.json();
+
+          currentCircles.forEach((circle) => circle.setMap(null));
+          currentCircles = [];
+
+          gridData.forEach((cell) => {
+            const circle = new google.maps.Circle({
               strokeColor: "#ff0040",
               strokeOpacity: 1,
               strokeWeight: 2,
+              fillOpacity: 0,
               map: map,
               center: { lat: cell.lat, lng: cell.lng },
               radius: cell.radius,
-              clickable: false, // Make circles non-clickable
-            })
-        );
+              clickable: false,
+            });
+            currentCircles.push(circle);
+          });
+        } catch (error) {
+          console.error("Error loading grid cells:", error);
+        } finally {
+          isLoading = false;
+        }
       }
 
       function handleMapClick(event) {
@@ -110,7 +148,6 @@
           document.getElementById("distance-info").innerHTML =
             `Distance: ${distanceKm} km<br><small>Click to start new measurement</small>`;
         } else if (clickedPoints.length > 2) {
-          // Clear and restart
           markers.forEach((marker) => marker.setMap(null));
           if (distanceLine) distanceLine.setMap(null);
           markers = [];

@@ -1,31 +1,76 @@
 import "@dotenvx/dotenvx/config";
-import { defineConfig } from "vite";
+import { sql } from "drizzle-orm";
+import { defineConfig, ViteDevServer } from "vite";
+import { db } from "./src/db/index.js";
+import { gridCellSchema } from "./src/db/schema.js";
+import { GridManager } from "./src/lib/grid-manager.js";
 
 export function injectGridData() {
   return {
     name: "inject-grid-data",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/grid-cells", async (req, res) => {
+        const url = new URL(req.url!, `http://${req.headers.host}`);
+        const bounds = {
+          north: parseFloat(url.searchParams.get("north") || "0"),
+          south: parseFloat(url.searchParams.get("south") || "0"),
+          east: parseFloat(url.searchParams.get("east") || "0"),
+          west: parseFloat(url.searchParams.get("west") || "0"),
+        };
+        const zoom = parseInt(url.searchParams.get("zoom") || "6");
+
+        // Add 50km buffer in degrees (approximately 0.45 degrees)
+        const buffer = 0.45;
+        const expandedBounds = {
+          north: bounds.north + buffer,
+          south: bounds.south - buffer,
+          east: bounds.east + buffer,
+          west: bounds.west - buffer,
+        };
+
+        // More lenient thresholds to show many more circles
+        let minRadius = 200;
+        if (zoom <= 6) minRadius = 5000;
+        else if (zoom <= 7) minRadius = 3000;
+        else if (zoom <= 8) minRadius = 2000;
+        else if (zoom <= 9) minRadius = 1000;
+        else if (zoom <= 10) minRadius = 500;
+        else if (zoom <= 11) minRadius = 300;
+
+        try {
+          const cells = await db
+            .select({
+              lat: gridCellSchema.latitude,
+              lng: gridCellSchema.longitude,
+              radius: gridCellSchema.radius,
+            })
+            .from(gridCellSchema).where(sql`
+              latitude BETWEEN ${expandedBounds.south} AND ${expandedBounds.north}
+              AND longitude BETWEEN ${expandedBounds.west} AND ${expandedBounds.east}
+              AND radius >= ${minRadius}
+            `);
+
+          const gridData = cells.map((cell) => ({
+            lat: parseFloat(cell.lat),
+            lng: parseFloat(cell.lng),
+            radius: cell.radius,
+          }));
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(gridData));
+        } catch (error) {
+          console.error("Error fetching grid cells:", error);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: "Failed to fetch grid cells" }));
+        }
+      });
+    },
     transformIndexHtml: async (html: string) => {
-      const { db } = await import("./src/db/index.js");
-      const { gridCellSchema } = await import("./src/db/schema.js");
-      const { GridManager } = await import("./src/lib/grid-manager.js");
-
       const gridManager = new GridManager("DEU");
-
-      // await gridManager.clearGrid();
-      // await gridManager.initializeCountryGrid();
-
-      const cells = await db.select().from(gridCellSchema);
-      const gridData = cells.map((cell) => ({
-        lat: parseFloat(cell.latitude),
-        lng: parseFloat(cell.longitude),
-        level: cell.level,
-        radius: cell.radius,
-      }));
-
       const geometry = await gridManager.getCountryGeometry();
 
       return html
-        .replace("`{{GRID_DATA}}`", JSON.stringify(gridData))
+        .replace("`{{GRID_DATA}}`", "[]")
         .replace("`{{GEOMETRY}}`", JSON.stringify(geometry))
         .replace(
           "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
@@ -34,6 +79,7 @@ export function injectGridData() {
     },
   };
 }
+
 export default defineConfig({
   plugins: [injectGridData()],
   server: { port: 3000 },

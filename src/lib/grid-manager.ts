@@ -1,4 +1,3 @@
-// src/lib/grid-manager.ts
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { count, eq, sql } from "drizzle-orm";
@@ -64,12 +63,6 @@ export class GridManager {
       console.log(
         `Radius ${radius}m: ${placed} circles (total: ${totalPlaced}) - ${startTime.fromNow()}`
       );
-
-      // Early termination if no circles were placed
-      if (placed === 0 && radius <= 500) {
-        console.log("No more space available - terminating early");
-        break;
-      }
     }
 
     console.log(
