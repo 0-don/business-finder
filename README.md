@@ -8,5 +8,5 @@ docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.
 
 ```bash
 uv sync
-uv run python generate_grid.py DEU 50000 100
+clear && uv run python generate_grid.py DEU
 ```

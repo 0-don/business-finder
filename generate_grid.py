@@ -4,6 +4,10 @@ import psycopg2
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 from dotenv import load_dotenv
+from datetime import datetime
+import humanize
+from geopy.distance import geodesic
+from geopy import Point
 
 load_dotenv()
 
@@ -113,6 +117,8 @@ class HexGridGenerator:
     def __init__(self, config: GridConfig):
         self.config = config
         self.db = DatabaseManager(config.country_code)
+        self.start_time = datetime.now()
+        self.total_circles = 0
 
     def can_place_at_least_one(self, radius_meters: int) -> bool:
         bounds = self.db.get_bounds()
@@ -125,8 +131,6 @@ class HexGridGenerator:
         high = max_radius
         step = max(50, (high - low) // 20)
 
-        print(f"  Searching for next optimal radius between {low}m and {high}m...")
-
         while low <= high:
             if self.can_place_at_least_one(high):
                 return high
@@ -134,15 +138,17 @@ class HexGridGenerator:
 
         return None
 
-    @staticmethod
-    def meters_to_degrees_lat(meters: float) -> float:
-        return meters / 111320.0
+    def meters_to_degrees_lat(self, meters: float) -> float:
+        """Convert meters to degrees latitude using geopy"""
+        point = Point(0, 0)
+        destination = geodesic(meters=meters).destination(point, bearing=0)
+        return abs(destination.latitude - point.latitude)
 
-    @staticmethod
-    def meters_to_degrees_lng(meters: float, lat: float) -> float:
-        if abs(lat) >= 90.0:
-            lat = 89.99
-        return meters / (111320.0 * math.cos(math.radians(lat)))
+    def meters_to_degrees_lng(self, meters: float, lat: float) -> float:
+        """Convert meters to degrees longitude at given latitude using geopy"""
+        point = Point(lat, 0)
+        destination = geodesic(meters=meters).destination(point, bearing=90)
+        return abs(destination.longitude - point.longitude)
 
     def generate_hex_candidates(
         self, bounds: Tuple[float, float, float, float], radius_meters: float
@@ -165,12 +171,19 @@ class HexGridGenerator:
         return candidates
 
     def generate_level(self, radius_meters: int, level: int) -> int:
-        print(f"Level {level}: radius {radius_meters}m")
         bounds = self.db.get_bounds()
         candidates = self.generate_hex_candidates(bounds, radius_meters)
         placements = self.db.get_valid_placements(candidates, radius_meters)
         self.db.insert_circles(placements, radius_meters, level)
-        print(f"  Placed {len(placements)} circles")
+
+        self.total_circles += len(placements)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        time_ago = humanize.naturaltime(datetime.now() - self.start_time)
+
+        print(
+            f"[{timestamp}] Radius {radius_meters}m: {len(placements)} circles (total: {self.total_circles}) - {time_ago}"
+        )
+
         return len(placements)
 
     def generate_grid(self) -> int:
@@ -179,10 +192,9 @@ class HexGridGenerator:
         current_radius = self.config.max_radius
         print(f"Starting radius: {current_radius}m")
 
-        total_circles, level = 0, 0
+        level = 0
         while current_radius and current_radius >= self.config.min_radius:
             placed = self.generate_level(current_radius, level)
-            total_circles += placed
             level += 1
 
             if current_radius <= self.config.min_radius:
@@ -198,8 +210,8 @@ class HexGridGenerator:
                 )
                 current_radius = int(current_radius * 0.85)
 
-        print(f"Complete! {total_circles} total circles in {level} levels")
-        return total_circles
+        print(f"Complete! {self.total_circles} total circles in {level} levels")
+        return self.total_circles
 
     def close(self):
         self.db.close()
