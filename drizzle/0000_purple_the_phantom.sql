@@ -33,16 +33,16 @@ CREATE TABLE "business" (
 CREATE TABLE "countries" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar(256) NOT NULL,
-	"iso_a3" varchar(3) NOT NULL,
+	"country_code" "country_code" NOT NULL,
 	"geometry" geometry(Geometry, 4326) NOT NULL,
-	CONSTRAINT "countries_iso_a3_unique" UNIQUE("iso_a3")
+	CONSTRAINT "countries_country_code_unique" UNIQUE("country_code")
 );
 --> statement-breakpoint
 CREATE TABLE "gadm_subdivisions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" integer NOT NULL,
 	"country_name" varchar(256) NOT NULL,
-	"iso_a3" varchar(3) NOT NULL,
+	"country_code" "country_code" NOT NULL,
 	"geometry" geometry(Geometry, 4326) NOT NULL,
 	CONSTRAINT "gadm_subdivisions_uid_unique" UNIQUE("uid")
 );

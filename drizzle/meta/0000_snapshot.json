@@ -1,5 +1,5 @@
 {
-  "id": "d0c040cc-4645-456f-b3fb-e4ce302c6656",
+  "id": "06d3ec3e-efd6-4c50-956e-28e6f04417be",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -241,9 +241,10 @@
           "primaryKey": false,
           "notNull": true
         },
-        "iso_a3": {
-          "name": "iso_a3",
-          "type": "varchar(3)",
+        "country_code": {
+          "name": "country_code",
+          "type": "country_code",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -258,11 +259,11 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "countries_iso_a3_unique": {
-          "name": "countries_iso_a3_unique",
+        "countries_country_code_unique": {
+          "name": "countries_country_code_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "iso_a3"
+            "country_code"
           ]
         }
       },
@@ -292,9 +293,10 @@
           "primaryKey": false,
           "notNull": true
         },
-        "iso_a3": {
-          "name": "iso_a3",
-          "type": "varchar(3)",
+        "country_code": {
+          "name": "country_code",
+          "type": "country_code",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
