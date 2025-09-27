@@ -7,12 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Constants
+DEFAULT_MAX_RADIUS = 50000
+DEFAULT_MIN_RADIUS = 100
+
 
 @dataclass
 class GridConfig:
     country_code: str
-    max_radius: int = 50000
-    min_radius: int = 100
+    max_radius: int = DEFAULT_MAX_RADIUS
+    min_radius: int = DEFAULT_MIN_RADIUS
 
 
 class DatabaseManager:
@@ -40,7 +44,6 @@ class DatabaseManager:
         limit_clause = f"LIMIT {limit}" if limit else ""
 
         with self.conn.cursor() as cur:
-            # CORRECTED LINE: Changed co.iso_a_3 to co.iso_a3
             query = f"""
                 WITH candidates (lng, lat) AS (VALUES {values_sql})
                 SELECT c.lng, c.lat
@@ -120,24 +123,16 @@ class HexGridGenerator:
     def find_next_optimal_radius(self, max_radius: int) -> Optional[int]:
         low = self.config.min_radius
         high = max_radius
-        best_radius_so_far = None
+        step = max(50, (high - low) // 20)
 
         print(f"  Searching for next optimal radius between {low}m and {high}m...")
 
-        step = max(50, (high - low) // 20)
-
         while low <= high:
-            mid = high
-            if mid < low:
-                break
+            if self.can_place_at_least_one(high):
+                return high
+            high -= step
 
-            if self.can_place_at_least_one(mid):
-                best_radius_so_far = mid
-                break
-            else:
-                high -= step
-
-        return best_radius_so_far
+        return None
 
     @staticmethod
     def meters_to_degrees_lat(meters: float) -> float:
@@ -197,7 +192,7 @@ class HexGridGenerator:
 
             if next_rad and next_rad < current_radius:
                 current_radius = next_rad
-            else:  # If search fails or doesn't reduce, fallback to a percentage
+            else:
                 print(
                     "  Search didn't find a smaller radius, using fallback reduction."
                 )
@@ -213,15 +208,8 @@ class HexGridGenerator:
 def main():
     import sys
 
-    if len(sys.argv) < 2:
-        print("Usage: python generate_grid.py <country_code> [max_radius] [min_radius]")
-        sys.exit(1)
-
-    config = GridConfig(
-        country_code=sys.argv[1].upper(),
-        max_radius=int(sys.argv[2]) if len(sys.argv) > 2 else 50000,
-        min_radius=int(sys.argv[3]) if len(sys.argv) > 3 else 100,
-    )
+    country_code = sys.argv[1].upper() if len(sys.argv) > 1 else "DEU"
+    config = GridConfig(country_code=country_code)
 
     generator = HexGridGenerator(config)
     try:
