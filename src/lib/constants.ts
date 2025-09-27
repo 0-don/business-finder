@@ -1,11 +1,14 @@
 import { Client } from "@googlemaps/google-maps-services-js";
-import { CountryCode, Language, PlaceType } from "../types";
+import type { CountryCode, Language, PlaceType } from "../types";
 
 export const CLIENT = new Client();
 
 export const MAX_PAGES_PER_CELL = 3;
 export const RESULTS_PER_PAGE = 20;
 export const MAX_RESULTS_PER_CELL = 60;
+
+export const MINIMIUM_RADIUS = 100; // in meters
+export const MAXIMUM_RADIUS = 50000;
 
 export const DEFAULT_COUNTRY_CODE: CountryCode = "DEU";
 export const DEFAULT_LANGUAGE: Language = "de";

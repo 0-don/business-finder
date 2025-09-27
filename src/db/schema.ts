@@ -19,7 +19,11 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
-import { COUNTRY_CODES } from "../lib/constants";
+import {
+  COUNTRY_CODES,
+  MAXIMUM_RADIUS,
+  MINIMIUM_RADIUS,
+} from "../lib/constants";
 
 export const countryCodeEnum = pgEnum("country_code", COUNTRY_CODES);
 export const languageEnum = pgEnum(
@@ -53,8 +57,8 @@ export const settingsSchema = pgTable(
     language: languageEnum("language").notNull(),
     placeType: placeTypeEnum("place_type").notNull(),
     keywords: text("keywords").array().notNull(),
-    maxRadius: doublePrecision("max_radius").default(50000),
-    minRadius: doublePrecision("min_radius").default(100),
+    maxRadius: doublePrecision("max_radius").default(MAXIMUM_RADIUS),
+    minRadius: doublePrecision("min_radius").default(MINIMIUM_RADIUS),
     isActive: boolean("is_active").default(true),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")

@@ -8,15 +8,15 @@ import {
   BoundsRow,
   CoordinateRow,
   CountryCode,
-  GridConfig,
   Point,
+  SettingsConfig,
 } from "../types";
 
 dayjs.extend(relativeTime);
 
 class DatabaseManager {
   constructor(
-    private countryCode: CountryCode,
+    private settings: SettingsConfig,
     private bounds?: Bounds
   ) {}
 
@@ -35,7 +35,7 @@ class DatabaseManager {
     const result = (await db.execute(sql`
       WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
       SELECT c.lng, c.lat FROM candidates c
-      JOIN countries co ON co.iso_a3 = ${this.countryCode} 
+      JOIN countries co ON co.iso_a3 = ${this.settings} 
       WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
       AND NOT EXISTS (
         SELECT 1 FROM grid_cell gc
@@ -69,11 +69,11 @@ class DatabaseManager {
     const result = (await db.execute(sql`
       SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
             ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
-      FROM countries WHERE iso_a3 = ${this.countryCode}
+      FROM countries WHERE iso_a3 = ${this.settings}
     `)) as unknown as BoundsRow[];
 
     if (!result.length) {
-      throw new Error(`Country ${this.countryCode} not found in database`);
+      throw new Error(`Country ${this.settings} not found in database`);
     }
 
     const row = result[0]!;
@@ -92,8 +92,8 @@ class HexGridGenerator {
   private startTime = dayjs();
   private newCirclesCount = 0; // Track only new circles added in this session
 
-  constructor(private config: GridConfig) {
-    this.db = new DatabaseManager(config.countryCode);
+  constructor(private settings: SettingsConfig) {
+    this.db = new DatabaseManager(settings);
   }
 
   private metersToDegrees(
@@ -142,11 +142,11 @@ class HexGridGenerator {
   ): Promise<number | null> {
     const step = Math.max(
       25, // Smaller steps for more granular radius selection
-      Math.floor((maxRadius - this.config.minRadius) / 30)
+      Math.floor((maxRadius - this.settings.minRadius) / 30)
     );
     for (
       let radius = maxRadius;
-      radius >= this.config.minRadius;
+      radius >= this.settings.minRadius;
       radius -= step
     ) {
       if (await this.canPlaceAtLeastOne(radius)) return radius;
@@ -189,11 +189,11 @@ class HexGridGenerator {
   }
 
   async generateGrid(): Promise<number> {
-    console.log(`Starting grid generation for ${this.config.countryCode}`);
+    console.log(`Starting grid generation for ${this.settings.countryCode}`);
 
     // Check for existing grid and resume from lowest radius
     const existingMinRadius = await this.getLowestExistingRadius();
-    let currentRadius = this.config.maxRadius;
+    let currentRadius = this.settings.maxRadius;
 
     if (existingMinRadius) {
       // Resume from just below the existing minimum radius
@@ -205,11 +205,11 @@ class HexGridGenerator {
 
     let level = 0;
 
-    while (currentRadius && currentRadius >= this.config.minRadius) {
+    while (currentRadius && currentRadius >= this.settings.minRadius) {
       await this.generateLevel(currentRadius, level);
       level++;
 
-      if (currentRadius <= this.config.minRadius) break;
+      if (currentRadius <= this.settings.minRadius) break;
 
       const nextRadius = await this.findNextOptimalRadius(currentRadius - 1);
       currentRadius =
@@ -239,16 +239,10 @@ export const getCountryGeometry = async (countryCode: CountryCode) => {
 };
 
 export async function generateCountryGrid(
-  countryCode: CountryCode,
-  maxRadius = 50000,
-  minRadius = 100
+  settings: SettingsConfig
 ): Promise<number> {
-  const generator = new HexGridGenerator({
-    countryCode,
-    maxRadius,
-    minRadius,
-  });
-  const db = new DatabaseManager(countryCode);
+  const generator = new HexGridGenerator(settings);
+  const db = new DatabaseManager(settings);
 
   try {
     // await db.clearGrid();

@@ -101,7 +101,7 @@ async function extractGADMZip(): Promise<void> {
   extractBar.stop();
 }
 
-async function seedSubdivisions(isoA3?: string): Promise<void> {
+async function seedSubdivisions(isoA3?: CountryCode): Promise<void> {
   const message = isoA3
     ? `Seeding Subdivisions for ${isoA3} from GPKG...`
     : "Seeding Subdivisions from GPKG...";

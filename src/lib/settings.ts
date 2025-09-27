@@ -7,6 +7,8 @@ import {
   DEFAULT_KEYWORDS,
   DEFAULT_LANGUAGE,
   DEFAULT_PLACE_TYPE,
+  MAXIMUM_RADIUS,
+  MINIMIUM_RADIUS,
 } from "./constants";
 
 export async function getActiveSettings(
@@ -15,14 +17,12 @@ export async function getActiveSettings(
   placeType: PlaceType = DEFAULT_PLACE_TYPE,
   keywords: string[] = DEFAULT_KEYWORDS
 ): Promise<SettingsConfig> {
-  const code: CountryCode = countryCode || "DEU";
-
   const settings = await db
     .select()
     .from(settingsSchema)
     .where(
       and(
-        eq(settingsSchema.countryCode, code),
+        eq(settingsSchema.countryCode, countryCode),
         eq(settingsSchema.language, language),
         eq(settingsSchema.placeType, placeType),
         eq(settingsSchema.isActive, true)
@@ -37,18 +37,18 @@ export async function getActiveSettings(
       language: settings[0].language,
       placeType: settings[0].placeType,
       keywords: settings[0].keywords,
-      maxRadius: settings[0].maxRadius || 50000,
-      minRadius: settings[0].minRadius || 100,
+      maxRadius: settings[0].maxRadius || MAXIMUM_RADIUS,
+      minRadius: settings[0].minRadius || MINIMIUM_RADIUS,
     };
   }
 
   return {
-    countryCode: code,
+    countryCode: countryCode || DEFAULT_COUNTRY_CODE,
     language: language || DEFAULT_LANGUAGE,
     placeType: placeType || DEFAULT_PLACE_TYPE,
     keywords: keywords.length ? keywords : DEFAULT_KEYWORDS,
-    maxRadius: 50000,
-    minRadius: 100,
+    maxRadius: MAXIMUM_RADIUS,
+    minRadius: MINIMIUM_RADIUS,
   };
 }
 

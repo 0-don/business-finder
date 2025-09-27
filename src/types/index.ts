@@ -25,12 +25,6 @@ export interface SettingsConfig {
   minRadius: number;
 }
 
-export interface GridConfig {
-  countryCode: CountryCode;
-  maxRadius: number;
-  minRadius: number;
-}
-
 export interface Point {
   lng: number;
   lat: number;
