@@ -1,29 +1,12 @@
-// src/lib/hex-grid-generator.ts
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
 
+import { Bounds, GridConfig, Point } from "../types";
+
 dayjs.extend(relativeTime);
-
-interface GridConfig {
-  countryCode: string;
-  maxRadius: number;
-  minRadius: number;
-}
-
-interface Point {
-  lng: number;
-  lat: number;
-}
-
-interface Bounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
 
 class DatabaseManager {
   constructor(
