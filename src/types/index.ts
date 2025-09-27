@@ -1,3 +1,22 @@
+import type {
+  countryCodeEnum,
+  languageEnum,
+  placeTypeEnum,
+} from "../db/schema";
+
+export type CountryCode = (typeof countryCodeEnum.enumValues)[number];
+export type Language = (typeof languageEnum.enumValues)[number];
+export type PlaceType = (typeof placeTypeEnum.enumValues)[number];
+
+export interface SettingsConfig {
+  countryCode: CountryCode;
+  language: Language;
+  placeType: PlaceType;
+  keywords: string[];
+  maxRadius: number;
+  minRadius: number;
+}
+
 export interface GridConfig {
   countryCode: string;
   maxRadius: number;

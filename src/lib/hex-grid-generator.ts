@@ -1,8 +1,8 @@
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { gridCellSchema } from "../db/schema";
+import { countries, gridCellSchema } from "../db/schema";
 import { Bounds, BoundsRow, CoordinateRow, GridConfig, Point } from "../types";
 
 dayjs.extend(relativeTime);
@@ -157,7 +157,7 @@ class HexGridGenerator {
   private async getLowestExistingRadius(): Promise<number | null> {
     const result = await db
       .select({
-        minRadius: sql<number>`MIN(${gridCellSchema.radiusMeters})`
+        minRadius: sql<number>`MIN(${gridCellSchema.radiusMeters})`,
       })
       .from(gridCellSchema)
       .limit(1);
@@ -183,17 +183,19 @@ class HexGridGenerator {
 
   async generateGrid(): Promise<number> {
     console.log(`Starting grid generation for ${this.config.countryCode}`);
-    
+
     // Check for existing grid and resume from lowest radius
     const existingMinRadius = await this.getLowestExistingRadius();
     let currentRadius = this.config.maxRadius;
-    
+
     if (existingMinRadius) {
       // Resume from just below the existing minimum radius
       currentRadius = Math.floor(existingMinRadius - 1);
-      console.log(`Resuming grid generation from radius ${currentRadius}m (existing min: ${existingMinRadius}m)`);
+      console.log(
+        `Resuming grid generation from radius ${currentRadius}m (existing min: ${existingMinRadius}m)`
+      );
     }
-    
+
     let level = 0;
 
     while (currentRadius && currentRadius >= this.config.minRadius) {
@@ -216,6 +218,18 @@ class HexGridGenerator {
     return finalTotal;
   }
 }
+
+export const getCountryGeometry = async (countryCode: string) => {
+  const result = await db
+    .select({
+      geojson: sql<string>`ST_AsGeoJSON(geometry)`,
+    })
+    .from(countries)
+    .where(eq(countries.isoA3, countryCode))
+    .limit(1);
+
+  return result[0]?.geojson ? JSON.parse(result[0].geojson) : null;
+};
 
 export async function generateCountryGrid(
   countryCode: string,

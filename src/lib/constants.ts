@@ -1,4 +1,5 @@
 import { Client } from "@googlemaps/google-maps-services-js";
+import { CountryCode, Language, PlaceType } from "../types";
 
 export const CLIENT = new Client();
 
@@ -6,7 +7,22 @@ export const MAX_PAGES_PER_CELL = 3;
 export const RESULTS_PER_PAGE = 20;
 export const MAX_RESULTS_PER_CELL = 60;
 
-export const COUNTRY_CODE = process.env.COUNTRY_CODE || "DEU";
+export const DEFAULT_COUNTRY: CountryCode = "DEU";
+export const DEFAULT_LANGUAGE: Language = "de";
+export const DEFAULT_PLACE_TYPE: PlaceType = "accounting";
+export const DEFAULT_KEYWORDS = [
+  "tax",
+  "steuer",
+  "steuerberater",
+  "steuerkanzlei",
+  "steuerberatung",
+  "buchführung",
+  "lohnsteuer",
+  "wirtschaftsprüfer",
+  "finanzbuchhaltung",
+  "jahresabschluss",
+  "steuererklärung",
+];
 
 export const COUNTRY_CODES = [
   "ABW",

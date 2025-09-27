@@ -24,12 +24,12 @@ import { COUNTRY_CODES } from "../lib/constants";
 export const countryCodeEnum = pgEnum("country_code", COUNTRY_CODES);
 export const languageEnum = pgEnum(
   "language",
-  Object.values(Language) as [Language, ...Language[]]
+  Object.values(Language) as [`${Language}`, ...`${Language}`[]]
 );
 export const placeTypeEnum = pgEnum("place_type", [
   ...Object.values(PlaceType1),
   ...Object.values(PlaceType2),
-] as [PlaceType1 | PlaceType2, ...(PlaceType1 | PlaceType2)[]]);
+] as [`${PlaceType1 | PlaceType2}`, ...`${PlaceType1 | PlaceType2}`[]]);
 
 // Custom geometry types
 const geometry = customType<{ data: string }>({
@@ -52,7 +52,7 @@ export const settingsSchema = pgTable(
     countryCode: countryCodeEnum("country_code").notNull(),
     language: languageEnum("language").notNull(),
     placeType: placeTypeEnum("place_type").notNull(),
-    keywords: text("keywords").notNull(),
+    keywords: text("keywords").array().notNull(),
     maxRadius: doublePrecision("max_radius").default(50000),
     minRadius: doublePrecision("min_radius").default(100),
     isActive: boolean("is_active").default(true),

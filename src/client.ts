@@ -1,5 +1,5 @@
-import { Language, PlaceType1 } from "@googlemaps/google-maps-services-js";
 import { CLIENT } from "./lib/constants";
+import { getActiveSettings } from "./lib/settings";
 
 export async function exponentialBackoff<T>(
   fn: () => Promise<T>,
@@ -32,7 +32,9 @@ export async function exponentialBackoff<T>(
   throw lastError!;
 }
 
-export async function getPlaceDetails(placeId: string) {
+export async function getPlaceDetails(placeId: string, countryCode?: string) {
+  const settings = await getActiveSettings(countryCode);
+
   return exponentialBackoff(async () => {
     const response = await CLIENT.placeDetails({
       params: {
@@ -44,7 +46,7 @@ export async function getPlaceDetails(placeId: string) {
           "opening_hours",
           "utc_offset",
         ],
-        language: Language.de,
+        language: settings.language,
         key: process.env.GOOGLE_PLACES_API!,
       },
     });
@@ -59,17 +61,19 @@ export async function getPlacesNearby(
   lat: number,
   lng: number,
   radius: number,
+  countryCode?: string,
   nextPageToken?: string | null
 ) {
+  const settings = await getActiveSettings(countryCode);
+
   return await exponentialBackoff(async () => {
     return CLIENT.placesNearby({
       params: {
         location: { lat, lng },
         radius,
-        type: PlaceType1.accounting,
-        keyword:
-          "tax|steuer|steuerberater|steuerkanzlei|steuerberatung|buchführung|lohnsteuer|wirtschaftsprüfer|finanzbuchhaltung|jahresabschluss|steuererklärung",
-        language: Language.de,
+        type: settings.placeType,
+        keyword: settings.keywords,
+        language: settings.language,
         key: process.env.GOOGLE_PLACES_API!,
         ...(nextPageToken && { pagetoken: nextPageToken }),
       },
