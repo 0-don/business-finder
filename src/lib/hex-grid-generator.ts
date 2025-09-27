@@ -3,8 +3,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
-
-import { Bounds, GridConfig, Point } from "../types";
+import { Bounds, BoundsRow, CoordinateRow, GridConfig, Point } from "../types";
 
 dayjs.extend(relativeTime);
 
@@ -20,26 +19,24 @@ class DatabaseManager {
 
   async getValidPlacements(
     candidates: Point[],
-    radius: number,
-    limit?: number
+    radius: number
   ): Promise<Point[]> {
     if (!candidates.length) return [];
 
     const valuesSql = candidates.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
-    const limitClause = limit ? `LIMIT ${limit}` : "";
 
-    const result = await db.execute(sql`
-      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
-      SELECT c.lng, c.lat FROM candidates c
-      JOIN countries co ON co.iso_a3 = ${this.countryCode} 
-      WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
-      AND NOT EXISTS (
-        SELECT 1 FROM grid_cell gc
-        WHERE ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters + 1)
-      ) ${sql.raw(limitClause)}
-    `);
+    const result = (await db.execute(sql`
+    WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
+    SELECT c.lng, c.lat FROM candidates c
+    JOIN countries co ON co.iso_a3 = ${this.countryCode} 
+    WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
+    AND NOT EXISTS (
+      SELECT 1 FROM grid_cell gc
+      WHERE ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
+    )
+  `)) as unknown as CoordinateRow[];
 
-    return result.map((row: any) => ({ lng: +row.lng, lat: +row.lat }));
+    return result.map((row) => ({ lng: +row.lng, lat: +row.lat }));
   }
 
   async insertCircles(
@@ -62,22 +59,22 @@ class DatabaseManager {
   async getBounds(): Promise<Bounds> {
     if (this.bounds) return this.bounds;
 
-    const result = await db.execute(sql`
-      SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
-             ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
-      FROM countries WHERE iso_a3 = ${this.countryCode}
-    `);
+    const result = (await db.execute(sql`
+          SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
+                ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
+          FROM countries WHERE iso_a3 = ${this.countryCode}
+        `)) as unknown as BoundsRow[];
 
     if (!result.length) {
       throw new Error(`Country ${this.countryCode} not found in database`);
     }
 
-    const row = result[0] as any;
+    const row = result[0]!;
     this.bounds = {
-      minX: +row.min_x,
-      minY: +row.min_y,
-      maxX: +row.max_x,
-      maxY: +row.max_y,
+      minX: Number(row.min_x),
+      minY: Number(row.min_y),
+      maxX: Number(row.max_x),
+      maxY: Number(row.max_y),
     };
     return this.bounds;
   }
@@ -104,14 +101,16 @@ class HexGridGenerator {
 
   private generateHexCandidates(bounds: Bounds, radius: number): Point[] {
     const candidates: Point[] = [];
-    const { latDeg: dyDeg } = this.metersToDegrees(radius * Math.sqrt(3));
+    // Tighter vertical spacing - reduce from sqrt(3) ≈ 1.732 to 1.5
+    const { latDeg: dyDeg } = this.metersToDegrees(radius * 1.5);
 
     let y = bounds.minY;
     let row = 0;
 
     while (y <= bounds.maxY) {
-      const { lngDeg: dxDeg } = this.metersToDegrees(radius * 2, y);
-      const { lngDeg: radiusDegLng } = this.metersToDegrees(radius, y);
+      // Tighter horizontal spacing - reduce from 2.0 to 1.73 (sqrt(3))
+      const { lngDeg: dxDeg } = this.metersToDegrees(radius * 1.73, y);
+      const { lngDeg: radiusDegLng } = this.metersToDegrees(radius * 0.866, y); // sqrt(3)/2
       const xStart = bounds.minX + (row % 2 === 1 ? radiusDegLng : 0);
 
       let x = xStart;
@@ -128,15 +127,15 @@ class HexGridGenerator {
   private async canPlaceAtLeastOne(radius: number): Promise<boolean> {
     const bounds = await this.db.getBounds();
     const candidates = this.generateHexCandidates(bounds, radius);
-    return (await this.db.getValidPlacements(candidates, radius, 1)).length > 0;
+    return (await this.db.getValidPlacements(candidates, radius)).length > 0;
   }
 
   private async findNextOptimalRadius(
     maxRadius: number
   ): Promise<number | null> {
     const step = Math.max(
-      50,
-      Math.floor((maxRadius - this.config.minRadius) / 20)
+      25, // Smaller steps for more granular radius selection
+      Math.floor((maxRadius - this.config.minRadius) / 30)
     );
     for (
       let radius = maxRadius;
@@ -178,7 +177,7 @@ class HexGridGenerator {
       currentRadius =
         nextRadius && nextRadius < currentRadius
           ? nextRadius
-          : Math.floor(currentRadius * 0.85);
+          : Math.floor(currentRadius * 0.9); // More conservative reduction
     }
 
     console.log(
