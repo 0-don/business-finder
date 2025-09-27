@@ -83,7 +83,7 @@ class DatabaseManager {
 class HexGridGenerator {
   private db: DatabaseManager;
   private startTime = dayjs();
-  private totalCircles = 0;
+  private newCirclesCount = 0; // Track only new circles added in this session
 
   constructor(private config: GridConfig) {
     this.db = new DatabaseManager(config.countryCode);
@@ -97,17 +97,6 @@ class HexGridGenerator {
     const lngDeg =
       (meters * 360) / (40075000 * Math.cos((lat * Math.PI) / 180));
     return { latDeg, lngDeg };
-  }
-
-  private async getLowestExistingRadius(): Promise<number | null> {
-    const result = await db
-      .select({
-        minRadius: sql<number>`MIN(${gridCellSchema.radiusMeters})`,
-      })
-      .from(gridCellSchema)
-      .limit(1);
-
-    return result[0]?.minRadius || null;
   }
 
   private generateHexCandidates(bounds: Bounds, radius: number): Point[] {
@@ -158,16 +147,35 @@ class HexGridGenerator {
     return null;
   }
 
+  private async getCurrentTotalCount(): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(gridCellSchema);
+    return result[0]?.count || 0;
+  }
+
+  private async getLowestExistingRadius(): Promise<number | null> {
+    const result = await db
+      .select({
+        minRadius: sql<number>`MIN(${gridCellSchema.radiusMeters})`
+      })
+      .from(gridCellSchema)
+      .limit(1);
+
+    return result[0]?.minRadius || null;
+  }
+
   private async generateLevel(radius: number, level: number): Promise<number> {
     const bounds = await this.db.getBounds();
     const candidates = this.generateHexCandidates(bounds, radius);
     const placements = await this.db.getValidPlacements(candidates, radius);
     await this.db.insertCircles(placements, radius, level);
 
-    this.totalCircles += placements.length;
+    this.newCirclesCount += placements.length;
+    const currentTotal = await this.getCurrentTotalCount();
     const timeAgo = dayjs().from(this.startTime);
     console.log(
-      `[${dayjs().format("HH:mm:ss")}] Radius ${radius}m: ${placements.length} circles (total: ${this.totalCircles}) - ${timeAgo}`
+      `[${dayjs().format("HH:mm:ss")}] Radius ${radius}m: ${placements.length} circles (total: ${currentTotal}) - ${timeAgo}`
     );
 
     return placements.length;
@@ -175,25 +183,17 @@ class HexGridGenerator {
 
   async generateGrid(): Promise<number> {
     console.log(`Starting grid generation for ${this.config.countryCode}`);
-
+    
     // Check for existing grid and resume from lowest radius
     const existingMinRadius = await this.getLowestExistingRadius();
     let currentRadius = this.config.maxRadius;
-
+    
     if (existingMinRadius) {
       // Resume from just below the existing minimum radius
       currentRadius = Math.floor(existingMinRadius - 1);
-      console.log(
-        `Resuming grid generation from radius ${currentRadius}m (existing min: ${existingMinRadius}m)`
-      );
-
-      // Count existing circles for accurate total
-      const existingCount = await db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(gridCellSchema);
-      this.totalCircles = existingCount[0]?.count || 0;
+      console.log(`Resuming grid generation from radius ${currentRadius}m (existing min: ${existingMinRadius}m)`);
     }
-
+    
     let level = 0;
 
     while (currentRadius && currentRadius >= this.config.minRadius) {
@@ -209,10 +209,11 @@ class HexGridGenerator {
           : Math.floor(currentRadius * 0.9);
     }
 
+    const finalTotal = await this.getCurrentTotalCount();
     console.log(
-      `Complete! ${this.totalCircles} total circles in ${level} levels`
+      `Complete! ${finalTotal} total circles (${this.newCirclesCount} new) in ${level} levels`
     );
-    return this.totalCircles;
+    return finalTotal;
   }
 }
 
