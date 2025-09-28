@@ -94,13 +94,15 @@ export async function createPostgreIndexes() {
   ]);
 }
 
-await migrate(db, { migrationsFolder: resolve("drizzle") })
-  .then(async () => {
-    await createPostgreIndexes();
-    const settings = await getActiveSettings();
-    await extractGADMData(settings);
-  })
-  .catch((err) => {
-    console.error("Error during migration or seeding:", err);
-    process.exit(1);
-  });
+if (!process.env.NODE_ENV) {
+  await migrate(db, { migrationsFolder: resolve("drizzle") })
+    .then(async () => {
+      await createPostgreIndexes();
+      const settings = await getActiveSettings();
+      await extractGADMData(settings);
+    })
+    .catch((err) => {
+      console.error("Error during migration or seeding:", err);
+      process.exit(1);
+    });
+}

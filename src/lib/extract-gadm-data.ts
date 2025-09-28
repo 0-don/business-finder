@@ -229,7 +229,6 @@ async function createCountriesFromSubdivisions(
 }
 
 export async function extractGADMData(settings: SettingsConfig): Promise<void> {
-  if (process.env.NODE_ENV) return;
   if (await checkExistingData(settings.countryCode)) return;
 
   await downloadGADMZip();
