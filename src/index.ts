@@ -1,7 +1,8 @@
 import "@dotenvx/dotenvx/config";
-import { DEFAULT_COUNTRY_CODE } from "./lib/constants";
 import { generateCountryGrid } from "./lib/hex-grid-generator";
 import { getActiveSettings } from "./lib/settings";
+import { extractGADMData } from "./lib/extract-gadm-data";
 
 const settings = await getActiveSettings();
-await generateCountryGrid(DEFAULT_COUNTRY_CODE);
+await extractGADMData(settings);
+await generateCountryGrid(settings);

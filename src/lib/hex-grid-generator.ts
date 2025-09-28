@@ -7,7 +7,6 @@ import {
   Bounds,
   BoundsRow,
   CoordinateRow,
-  CountryCode,
   Point,
   SettingsConfig,
 } from "../types";
@@ -226,13 +225,13 @@ class HexGridGenerator {
   }
 }
 
-export const getCountryGeometry = async (countryCode: CountryCode) => {
+export const getCountryGeometry = async (settings: SettingsConfig) => {
   const result = await db
     .select({
       geojson: sql<string>`ST_AsGeoJSON(geometry)`,
     })
     .from(countries)
-    .where(eq(countries.isoA3, countryCode))
+    .where(eq(countries.isoA3, settings.countryCode))
     .limit(1);
 
   return result[0]?.geojson ? JSON.parse(result[0].geojson) : null;

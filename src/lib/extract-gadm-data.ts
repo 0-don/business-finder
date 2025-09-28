@@ -7,8 +7,7 @@ import { pipeline } from "stream/promises";
 import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
-import { CountryCode, Subdivision } from "../types";
-import { DEFAULT_COUNTRY_CODE } from "./constants";
+import { CountryCode, SettingsConfig, Subdivision } from "../types";
 
 const BATCH_SIZE = 100;
 const ZIP_PATH = "./gadm_410-gpkg.zip";
@@ -234,13 +233,11 @@ async function createCountriesFromSubdivisions(
   countriesBar.stop();
 }
 
-export async function extractGADMData(
-  isoA3: CountryCode = DEFAULT_COUNTRY_CODE
-): Promise<void> {
-  if (await checkExistingData(isoA3)) return;
+export async function extractGADMData(settings: SettingsConfig): Promise<void> {
+  if (await checkExistingData(settings.countryCode)) return;
 
   await downloadGADMZip();
   await extractGADMZip();
-  await seedSubdivisions(isoA3);
-  await createCountriesFromSubdivisions(isoA3);
+  await seedSubdivisions(settings.countryCode);
+  await createCountriesFromSubdivisions(settings.countryCode);
 }

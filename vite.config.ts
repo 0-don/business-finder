@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";
 import { db } from "./src/db/index.js";
 import { gridCellSchema } from "./src/db/schema.js";
-import { COUNTRY_CODE } from "./src/lib/constants.js";
-import { getCountryGeometry } from "./src/lib/geometry.js";
+import { getCountryGeometry } from "./src/lib/hex-grid-generator.js";
+import { getActiveSettings } from "./src/lib/settings.js";
 
 export function injectGridData() {
   return {
@@ -36,6 +36,7 @@ export function injectGridData() {
         else if (zoom <= 10) minRadius = 500;
         else if (zoom <= 11) minRadius = 300;
 
+        const settings = await getActiveSettings();
         try {
           const cells = await db
             .select({
@@ -53,7 +54,6 @@ export function injectGridData() {
               AND ${gridCellSchema.radiusMeters} >= ${minRadius}
           `);
 
-    
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(cells));
         } catch (error) {
@@ -64,7 +64,8 @@ export function injectGridData() {
       });
     },
     transformIndexHtml: async (html: string) => {
-      const geometry = await getCountryGeometry(COUNTRY_CODE);
+      const settings = await getActiveSettings();
+      const geometry = await getCountryGeometry(settings);
 
       return html
         .replace("`{{GRID_DATA}}`", "[]")
