@@ -217,7 +217,7 @@ async function createCountriesFromSubdivisions(
         geometry: sql`(
           SELECT ST_Union(geometry)
           FROM gadm_subdivisions 
-          WHERE iso_a3 = ${country.iso_a3}
+          WHERE "isoA3" = ${country.iso_a3}
         )`,
       })
       .onConflictDoNothing();

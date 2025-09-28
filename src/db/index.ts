@@ -37,7 +37,7 @@ export async function createPostgreIndexes() {
 
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_iso_btree 
-    ON countries (iso_a3);
+    ON countries ("isoA3");
   `);
 
   // Grid cell - separate spatial and radius indexes (can't mix in GiST)
@@ -79,7 +79,7 @@ export async function createPostgreIndexes() {
   // GADM subdivisions - ISO code index for country filtering
   await db.execute(sql`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_iso_btree 
-    ON gadm_subdivisions (iso_a3);
+    ON gadm_subdivisions ("isoA3");
   `);
 }
 

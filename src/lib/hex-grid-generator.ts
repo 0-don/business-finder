@@ -33,7 +33,7 @@ class DatabaseManager {
     const result = (await db.execute(sql`
       WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
       SELECT c.lng, c.lat FROM candidates c
-      JOIN countries co ON co.country_code = ${this.settings.countryCode}
+      JOIN countries co ON co."isoA3" = ${this.settings.countryCode}
       WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
       AND NOT EXISTS (
         SELECT 1 FROM grid_cell gc
@@ -67,7 +67,7 @@ class DatabaseManager {
     const result = (await db.execute(sql`
       SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
             ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
-      FROM countries WHERE country_code = ${this.settings.countryCode}
+      FROM countries WHERE "isoA3" = ${this.settings.countryCode}
     `)) as unknown as BoundsRow[];
 
     if (!result.length) {
