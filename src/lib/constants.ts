@@ -3,6 +3,11 @@ import type { CountryCode, Language, PlaceType } from "../types";
 
 export const CLIENT = new Client();
 
+export const ZIP_PATH = "./gadm_410-gpkg.zip";
+export const GPKG_PATH = "./gadm_410.gpkg";
+export const DOWNLOAD_URL =
+  "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
+
 export const MAX_PAGES_PER_CELL = 3;
 export const RESULTS_PER_PAGE = 20;
 export const MAX_RESULTS_PER_CELL = 60;

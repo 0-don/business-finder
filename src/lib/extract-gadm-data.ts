@@ -8,12 +8,9 @@ import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
 import { CountryCode, SettingsConfig, Subdivision } from "../types";
+import { ZIP_PATH, DOWNLOAD_URL, GPKG_PATH } from "./constants";
 
 const BATCH_SIZE = 100;
-const ZIP_PATH = "./gadm_410-gpkg.zip";
-const GPKG_PATH = "./gadm_410.gpkg";
-const DOWNLOAD_URL =
-  "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
 
 async function checkExistingData(isoA3?: CountryCode): Promise<boolean> {
   if (isoA3) {
