@@ -8,9 +8,7 @@ import { Extract } from "unzipper";
 import { db } from "../db";
 import { countries, gadmSubdivisions } from "../db/schema";
 import { CountryCode, SettingsConfig, Subdivision } from "../types";
-import { ZIP_PATH, DOWNLOAD_URL, GPKG_PATH } from "./constants";
-
-const BATCH_SIZE = 100;
+import { BATCH_SIZE, DOWNLOAD_URL, GPKG_PATH, ZIP_PATH } from "./constants";
 
 async function checkExistingData(isoA3?: CountryCode): Promise<boolean> {
   if (isoA3) {

@@ -3,6 +3,7 @@ import type { CountryCode, Language, PlaceType } from "../types";
 
 export const CLIENT = new Client();
 
+export const BATCH_SIZE = 100;
 export const ZIP_PATH = "./gadm_410-gpkg.zip";
 export const GPKG_PATH = "./gadm_410.gpkg";
 export const DOWNLOAD_URL =
