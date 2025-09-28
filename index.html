@@ -4,6 +4,7 @@
     <title>Grid Viewer</title>
     <meta name="viewport" content="initial-scale=1.0" />
     <meta charset="utf-8" />
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
       #map {
         height: 100%;
@@ -14,28 +15,43 @@
         margin: 0;
         padding: 0;
       }
-      #distance-info {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        background: white;
-        padding: 10px;
-        border-radius: 5px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-        font-family: Arial, sans-serif;
-      }
     </style>
   </head>
   <body>
     <div id="map"></div>
-    <div id="distance-info">Click two points to measure distance</div>
+    <div
+      id="distance-info"
+      class="absolute top-2 left-2 bg-white p-3 rounded-lg shadow-lg font-sans text-sm"
+    >
+      Click two points to measure distance
+    </div>
+    <div
+      id="legend"
+      class="absolute top-2 right-2 bg-white/95 p-3 rounded-lg shadow-lg font-sans min-w-48 max-w-72 border border-gray-200 hidden"
+    >
+      <h4 class="text-sm font-bold text-gray-800 mb-2">Grid Cell Info</h4>
+      <div class="flex justify-between mb-1 text-xs">
+        <span class="text-gray-600 font-medium">ID:</span>
+        <span class="text-gray-800" id="cell-id">-</span>
+      </div>
+      <div class="flex justify-between mb-1 text-xs">
+        <span class="text-gray-600 font-medium">Radius:</span>
+        <span class="text-gray-800" id="cell-radius">-</span>
+      </div>
+      <div class="flex justify-between mb-1 text-xs">
+        <span class="text-gray-600 font-medium">Location:</span>
+        <span class="text-gray-800" id="cell-location">-</span>
+      </div>
+    </div>
     <script>
       let map;
       let clickedPoints = [];
       let distanceLine = null;
       let markers = [];
       let currentCircles = [];
+      let gridCellsData = [];
       let isLoading = false;
+      let legend = null;
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
@@ -44,8 +60,10 @@
           mapTypeId: google.maps.MapTypeId.HYBRID,
         });
 
+        legend = document.getElementById("legend");
         map.addListener("click", handleMapClick);
         map.addListener("idle", loadGridCells);
+        map.addListener("mousemove", handleMouseMove);
 
         const geometry = {
           type: "FeatureCollection",
@@ -67,6 +85,52 @@
         });
 
         loadGridCells();
+      }
+
+      function showLegend(cellData) {
+        document.getElementById("cell-id").textContent = cellData.id;
+        document.getElementById("cell-radius").textContent =
+          `${cellData.radius.toLocaleString()} m`;
+        document.getElementById("cell-location").textContent =
+          `${cellData.lat.toFixed(4)}, ${cellData.lng.toFixed(4)}`;
+        legend.classList.remove("hidden");
+      }
+
+      function hideLegend() {
+        legend.classList.add("hidden");
+      }
+
+      function isPointInCircle(point, center, radius) {
+        const distance = google.maps.geometry.spherical.computeDistanceBetween(
+          point,
+          new google.maps.LatLng(center.lat, center.lng)
+        );
+        return distance <= radius;
+      }
+
+      function handleMouseMove(event) {
+        const mouseLatLng = event.latLng;
+        let foundCell = null;
+
+        // Check if mouse is over any circle
+        for (const cellData of gridCellsData) {
+          if (
+            isPointInCircle(
+              mouseLatLng,
+              { lat: cellData.lat, lng: cellData.lng },
+              cellData.radius
+            )
+          ) {
+            foundCell = cellData;
+            break;
+          }
+        }
+
+        if (foundCell) {
+          showLegend(foundCell);
+        } else {
+          hideLegend();
+        }
       }
 
       async function loadGridCells() {
@@ -92,6 +156,7 @@
           if (!response.ok) throw new Error("Failed to fetch grid cells");
 
           const gridData = await response.json();
+          gridCellsData = gridData; // Store for mouse hover detection
 
           currentCircles.forEach((circle) => circle.setMap(null));
           currentCircles = [];
@@ -105,8 +170,9 @@
               map: map,
               center: { lat: cell.lat, lng: cell.lng },
               radius: cell.radius,
-              clickable: false,
+              clickable: false, // Make circles non-clickable so map clicks work
             });
+
             currentCircles.push(circle);
           });
         } catch (error) {
@@ -146,7 +212,7 @@
 
           const distanceKm = (distance / 1000).toFixed(2);
           document.getElementById("distance-info").innerHTML =
-            `Distance: ${distanceKm} km<br><small>Click to start new measurement</small>`;
+            `Distance: ${distanceKm} km<br><small class="text-gray-500">Click to start new measurement</small>`;
         } else if (clickedPoints.length > 2) {
           markers.forEach((marker) => marker.setMap(null));
           if (distanceLine) distanceLine.setMap(null);
