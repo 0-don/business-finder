@@ -1,8 +1,8 @@
 import "@dotenvx/dotenvx/config";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";
 import { db } from "./src/db/index.js";
-import { gridCellSchema } from "./src/db/schema.js";
+import { gridCellSchema, settingsSchema } from "./src/db/schema.js";
 import { getCountryGeometry } from "./src/lib/hex-grid-generator.js";
 import { getActiveSettings } from "./src/lib/settings.js";
 
@@ -45,14 +45,19 @@ export function injectGridData() {
               lng: sql<number>`ST_X(${gridCellSchema.center})`,
               radius: gridCellSchema.radiusMeters,
             })
-            .from(gridCellSchema).where(sql`
-              ST_Intersects(
-                ${gridCellSchema.center},
-                ST_MakeEnvelope(${expandedBounds.west}, ${expandedBounds.south}, 
-                              ${expandedBounds.east}, ${expandedBounds.north}, 4326)
-              )
-              AND ${gridCellSchema.radiusMeters} >= ${minRadius}
-          `);
+            .from(gridCellSchema)
+            .innerJoin(
+              settingsSchema,
+              eq(gridCellSchema.countryCode, settingsSchema.countryCode)
+            ).where(sql`
+                ST_Intersects(
+                  ${gridCellSchema.center},
+                  ST_MakeEnvelope(${expandedBounds.west}, ${expandedBounds.south}, 
+                                ${expandedBounds.east}, ${expandedBounds.north}, 4326)
+                )
+                AND ${gridCellSchema.radiusMeters} >= ${minRadius}
+                AND ${settingsSchema.id} = ${settings.id}
+            `);
 
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(cells));
