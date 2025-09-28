@@ -25,16 +25,16 @@ class DatabaseManager {
     const valuesSql = candidates.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
 
     const result = (await db.execute(sql`
-    WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
-    SELECT c.lng, c.lat FROM candidates c
-    JOIN countries co ON co."isoA3" = ${this.settings.countryCode}
-    WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
-    AND NOT EXISTS (
-      SELECT 1 FROM grid_cell gc
-      WHERE gc.country_code = ${this.settings.countryCode}
-      AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
-    )
-  `)) as unknown as Point[];
+      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
+      SELECT c.lng, c.lat FROM candidates c
+      JOIN countries co ON co."isoA3" = ${this.settings.countryCode}
+      WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
+      AND NOT EXISTS (
+        SELECT 1 FROM grid_cell gc
+        WHERE gc.country_code = ${this.settings.countryCode}
+        AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
+      )
+    `)) as unknown as Point[];
 
     return result;
   }
@@ -58,11 +58,16 @@ class DatabaseManager {
   }
 
   async getBounds(): Promise<Bounds> {
-    const result = (await db.execute(sql`
-    SELECT ST_XMin(geometry) as "minX", ST_YMin(geometry) as "minY", 
-          ST_XMax(geometry) as "maxX", ST_YMax(geometry) as "maxY"
-    FROM countries WHERE "isoA3" = ${this.settings.countryCode}
-  `)) as unknown as Bounds[];
+    const result = await db
+      .select({
+        minX: sql<number>`ST_XMin(${countries.geometry})`,
+        minY: sql<number>`ST_YMin(${countries.geometry})`,
+        maxX: sql<number>`ST_XMax(${countries.geometry})`,
+        maxY: sql<number>`ST_YMax(${countries.geometry})`,
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, this.settings.countryCode))
+      .limit(1);
 
     if (!result.length) {
       throw new Error(
@@ -213,9 +218,7 @@ class HexGridGenerator {
 
 export const getCountryGeometry = async (settings: SettingsConfig) => {
   const result = await db
-    .select({
-      geojson: sql<string>`ST_AsGeoJSON(geometry)`,
-    })
+    .select({ geojson: sql<string>`ST_AsGeoJSON(geometry)` })
     .from(countries)
     .where(eq(countries.isoA3, settings.countryCode))
     .limit(1);
