@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, not } from "drizzle-orm";
 import { db } from "../db";
 import { gridCellSchema } from "../db/schema";
 import { Point, SettingsConfig } from "../types";
@@ -9,166 +9,86 @@ interface Circle {
 }
 
 /**
- * Converts a distance in meters to an approximate distance in degrees latitude.
- * @param meters - The distance in meters.
- * @returns The approximate distance in degrees.
+ * Calculates the approximate distance between two points in meters.
  */
-function metersToLatDegrees(meters: number): number {
-  return meters / 111320;
+function getApproximateDistance(p1: Point, p2: Point): number {
+  const R = 6371e3; // Earth's radius in meters
+  const radLat1 = (p1.lat * Math.PI) / 180;
+  const radLat2 = (p2.lat * Math.PI) / 180;
+  const deltaLat = ((p2.lat - p1.lat) * Math.PI) / 180;
+  const deltaLng = ((p2.lng - p1.lng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(radLat1) *
+      Math.cos(radLat2) *
+      Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
 }
 
 /**
- * Converts a distance in meters to an approximate distance in degrees longitude.
- * @param meters - The distance in meters.
- * @param lat - The latitude at which the conversion is done.
- * @returns The approximate distance in degrees.
+ * Generates all potential hexagonal candidates, pre-filtered to be within the parent circle.
  */
-function metersToLngDegrees(meters: number, lat: number): number {
-  return meters / (111320 * Math.cos((lat * Math.PI) / 180));
-}
-
-/**
- * Generates candidate points in a hexagonal grid within the bounding box of a larger circle.
- * @param center - The center of the original circle.
- * @param radius - The radius of the original circle in meters.
- * @param candidateRadius - The radius of the candidate circles in meters.
- * @returns An array of candidate center points.
- */
-function generateHexCandidates(
-  center: Point,
-  radius: number,
-  candidateRadius: number
-): Point[] {
-  const candidates: Point[] = [];
-  const searchBounds = {
-    minLat: center.lat - metersToLatDegrees(radius),
-    maxLat: center.lat + metersToLatDegrees(radius),
-    minLng: center.lng - metersToLngDegrees(radius, center.lat),
-    maxLng: center.lng + metersToLngDegrees(radius, center.lat),
-  };
-
-  const dy = metersToLatDegrees(candidateRadius * 1.5);
-  let row = 0;
-
-  for (let lat = searchBounds.minLat; lat <= searchBounds.maxLat; lat += dy) {
-    const dx = metersToLngDegrees(candidateRadius * 1.732, lat);
-    const xOffset = metersToLngDegrees(candidateRadius * 0.866, lat);
-    const startLng = searchBounds.minLng + (row % 2 === 1 ? xOffset : 0);
-
-    for (let lng = startLng; lng <= searchBounds.maxLng; lng += dx) {
-      candidates.push({ lng, lat });
-    }
-    row++;
-  }
-  return candidates;
-}
-
-/**
- * Uses a PostGIS query to filter a list of candidate circles, returning only those
- * that are valid (within the parent boundary and not overlapping existing circles).
- * @param parentCenter - The center of the parent circle.
- * @param parentRadius - The radius of the parent circle.
- * @param candidates - An array of candidate circles to validate.
- * @param countryCode - The country code for scoping the overlap check.
- * @returns A promise that resolves to an array of valid center points.
- */
-async function getValidPlacements(
+function generateAllCandidates(
   parentCenter: Point,
   parentRadius: number,
-  candidates: Circle[],
-  countryCode: string
-): Promise<Point[]> {
-  if (candidates.length === 0) return [];
+  minRadius: number
+): Circle[] {
+  const allCandidates: Circle[] = [];
+  let currentRadius = parentRadius / 2.5;
 
-  const valuesSql = candidates
-    .map((c) => `(${c.center.lng}, ${c.center.lat}, ${c.radius})`)
-    .join(", ");
+  while (currentRadius >= minRadius) {
+    const dy = currentRadius * 1.5;
+    const dx = currentRadius * 1.732;
 
-  const parentCircleWKT = `ST_Buffer(ST_SetSRID(ST_Point(${parentCenter.lng}, ${parentCenter.lat}), 4326)::geography, ${parentRadius})::geometry`;
+    const latRadiusDegrees = parentRadius / 111320;
+    const lngRadiusDegrees =
+      parentRadius / (111320 * Math.cos((parentCenter.lat * Math.PI) / 180));
 
-  const result = (await db.execute(sql`
-    WITH candidates (lng, lat, radius) AS (VALUES ${sql.raw(valuesSql)})
-    SELECT c.lng, c.lat FROM candidates c
-    WHERE
-      -- Filter 1: Ensure the candidate circle is fully within the parent circle.
-      ST_Within(
-        ST_Buffer(ST_SetSRID(ST_Point(c.lng, c.lat), 4326)::geography, c.radius)::geometry,
-        ${sql.raw(parentCircleWKT)}
-      )
-      -- Filter 2: Ensure it does not overlap with any *already existing* circles.
-      AND NOT EXISTS (
-        SELECT 1 FROM grid_cell gc
-        WHERE gc.country_code = ${countryCode}
-        AND ST_DWithin(
-          ST_SetSRID(ST_Point(c.lng, c.lat), 4326)::geography,
-          gc.center::geography,
-          c.radius + gc.radius_meters
-        )
-      )
-  `)) as unknown as Point[];
+    const latStep = dy / 111320;
+    let row = 0;
 
-  return result;
-}
+    for (
+      let lat = parentCenter.lat - latRadiusDegrees;
+      lat <= parentCenter.lat + latRadiusDegrees;
+      lat += latStep
+    ) {
+      const lngStep = dx / (111320 * Math.cos((lat * Math.PI) / 180));
+      const lngOffset =
+        (currentRadius * 0.866) /
+        (111320 * Math.cos((lat * Math.PI) / 180));
+      const startLng =
+        parentCenter.lng - lngRadiusDegrees + (row % 2 === 1 ? lngOffset : 0);
 
-/**
- * Generates and inserts new circles by iteratively filling the parent circle's area.
- * It starts with larger circles and progressively uses smaller ones to fill the gaps.
- * @param settings - The active application settings.
- * @param parentCell - The properties of the cell being split.
- * @returns The total number of new circles inserted.
- */
-async function generateAndInsertPackedCircles(
-  settings: SettingsConfig,
-  parentCell: { center: Point; radius: number; level: number }
-): Promise<number> {
-  let totalInserted = 0;
-  // Start with a radius that is a fraction of the parent, allowing for multiple circles.
-  let currentRadius = parentCell.radius / 2.5;
-
-  while (currentRadius >= settings.minRadius) {
-    const candidateCenters = generateHexCandidates(
-      parentCell.center,
-      parentCell.radius,
-      currentRadius
-    );
-    const candidates = candidateCenters.map((center) => ({
-      center,
-      radius: currentRadius,
-    }));
-
-    // Use the database to efficiently find valid, non-overlapping placements
-    const validPlacements = await getValidPlacements(
-      parentCell.center,
-      parentCell.radius,
-      candidates,
-      settings.countryCode
-    );
-
-    // Insert the valid circles for this radius level
-    if (validPlacements.length > 0) {
-      const values = validPlacements.map((p) => ({
-        center: sql`ST_SetSRID(ST_Point(${p.lng}, ${p.lat}), 4326)`,
-        radiusMeters: currentRadius,
-        circle: sql`ST_Buffer(ST_SetSRID(ST_Point(${p.lng}, ${p.lat}), 4326)::geography, ${currentRadius})::geometry`,
-        level: parentCell.level + 1,
-        countryCode: settings.countryCode,
-      }));
-
-      await db.insert(gridCellSchema).values(values);
-      totalInserted += validPlacements.length;
+      for (
+        let lng = startLng;
+        lng <= parentCenter.lng + lngRadiusDegrees;
+        lng += lngStep
+      ) {
+        const candidateCenter = { lng, lat };
+        if (
+          getApproximateDistance(candidateCenter, parentCenter) +
+            currentRadius <=
+          parentRadius
+        ) {
+          allCandidates.push({
+            center: candidateCenter,
+            radius: currentRadius,
+          });
+        }
+      }
+      row++;
     }
-
-    // Reduce the radius to fill in the remaining gaps in the next iteration.
     currentRadius *= 0.85;
   }
-  return totalInserted;
+  return allCandidates.sort((a, b) => b.radius - a.radius);
 }
 
 /**
  * Replaces a single grid cell with a tightly packed set of smaller cells.
- * @param settings - The active application settings.
- * @param cellId - The ID of the grid cell to split.
- * @returns The number of new grid cells created.
  */
 export async function splitGridCell(
   settings: SettingsConfig,
@@ -189,16 +109,73 @@ export async function splitGridCell(
   if (!cellToSplit.length) return 0;
   const originalCell = cellToSplit[0]!;
 
-  // Remove the original cell to make space for the new, smaller ones
+  // Step 1: Fetch all nearby existing circles (obstacles) ONCE.
+  const searchRadius = originalCell.radius * 3; // Search in a generous area
+  const searchBounds = sql`ST_Expand(${sql.raw(`ST_SetSRID(ST_Point(${originalCell.lng}, ${originalCell.lat}), 4326)`)}::geometry, ${searchRadius / 111320})`;
+  
+  const obstacles = await db
+    .select({
+        center: {
+            lng: sql<number>`ST_X(${gridCellSchema.center})`,
+            lat: sql<number>`ST_Y(${gridCellSchema.center})`,
+        },
+        radius: gridCellSchema.radiusMeters
+    })
+    .from(gridCellSchema)
+    .where(and(
+        not(eq(gridCellSchema.id, cellId)), // Exclude the cell we are splitting
+        sql`${gridCellSchema.center} && ${searchBounds}`
+    ));
+
+  // Step 2: Generate all potential candidates in memory.
+  const allCandidates = generateAllCandidates(
+    { lng: originalCell.lng, lat: originalCell.lat },
+    originalCell.radius,
+    settings.minRadius
+  );
+
+  // Step 3: Perform fast in-memory packing, checking against both new circles and existing obstacles.
+  const packedCircles: Circle[] = [];
+  for (const candidate of allCandidates) {
+    let hasOverlap = false;
+
+    // Check overlap against newly placed circles
+    for (const placed of packedCircles) {
+      if (getApproximateDistance(candidate.center, placed.center) < candidate.radius + placed.radius) {
+        hasOverlap = true;
+        break;
+      }
+    }
+    if (hasOverlap) continue;
+
+    // Check overlap against existing obstacles from the database
+    for (const obstacle of obstacles) {
+        if (getApproximateDistance(candidate.center, obstacle.center) < candidate.radius + obstacle.radius) {
+            hasOverlap = true;
+            break;
+        }
+    }
+
+    if (!hasOverlap) {
+      packedCircles.push(candidate);
+    }
+  }
+  
+  // Step 4: Delete the original cell, then perform a single bulk insert.
   await db.delete(gridCellSchema).where(eq(gridCellSchema.id, cellId));
 
-  // The main function that orchestrates the packing and insertion process
-  const newCircleCount = await generateAndInsertPackedCircles(settings, {
-    center: { lng: originalCell.lng, lat: originalCell.lat },
-    radius: originalCell.radius,
-    level: originalCell.level,
-  });
+  if (packedCircles.length > 0) {
+    const valuesToInsert = packedCircles.map((circle) => ({
+      center: sql`ST_SetSRID(ST_Point(${circle.center.lng}, ${circle.center.lat}), 4326)`,
+      radiusMeters: circle.radius,
+      circle: sql`ST_Buffer(ST_SetSRID(ST_Point(${circle.center.lng}, ${circle.center.lat}), 4326)::geography, ${circle.radius})::geometry`,
+      level: originalCell.level + 1,
+      countryCode: settings.countryCode,
+    }));
+    await db.insert(gridCellSchema).values(valuesToInsert);
+  }
 
+  const newCircleCount = packedCircles.length;
   console.log(
     `Split cell ${cellId}: removed 1 circle, added ${newCircleCount} new packed circles.`
   );
