@@ -78,14 +78,14 @@ export const gadmSubdivisions = pgTable("gadm_subdivisions", {
   id: serial("id").primaryKey(),
   uid: integer("uid").notNull().unique(),
   countryName: varchar("country_name", { length: 256 }).notNull(),
-  isoA3: countryCodeEnum("country_code").notNull(),
+  isoA3: countryCodeEnum("isoA3").notNull(),
   geometry: geometry("geometry").notNull(),
 });
 
 export const countries = pgTable("countries", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 256 }).notNull(),
-  isoA3: countryCodeEnum("country_code").notNull().unique(),
+  isoA3: countryCodeEnum("isoA3").notNull().unique(),
   geometry: geometry("geometry").notNull(),
 });
 

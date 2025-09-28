@@ -1,6 +1,6 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
 import cliProgress from "cli-progress";
-import { sql,eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
