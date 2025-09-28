@@ -1,6 +1,6 @@
 import { GeoPackageAPI } from "@ngageoint/geopackage";
 import cliProgress from "cli-progress";
-import { sql } from "drizzle-orm";
+import { sql,eq } from "drizzle-orm";
 import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
@@ -20,7 +20,7 @@ async function checkExistingData(isoA3?: CountryCode): Promise<boolean> {
     const existingCountry = await db
       .select()
       .from(countries)
-      .where(sql`iso_a3 = ${isoA3}`)
+      .where(eq(countries.isoA3, isoA3))
       .limit(1);
     return existingCountry.length > 0;
   }
@@ -190,7 +190,7 @@ async function createCountriesFromSubdivisions(
     .from(gadmSubdivisions);
 
   const distinctCountries = isoA3
-    ? await distinctCountriesQuery.where(sql`iso_a3 = ${isoA3}`)
+    ? await distinctCountriesQuery.where(eq(gadmSubdivisions.isoA3, isoA3))
     : await distinctCountriesQuery;
 
   const countriesBar = new cliProgress.SingleBar(

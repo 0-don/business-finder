@@ -17,6 +17,7 @@ export type Subdivision = {
 };
 
 export interface SettingsConfig {
+  id: number;
   countryCode: CountryCode;
   language: Language;
   placeType: PlaceType;
