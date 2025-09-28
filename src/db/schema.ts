@@ -35,7 +35,6 @@ export const placeTypeEnum = pgEnum("place_type", [
   ...Object.values(PlaceType2),
 ] as [`${PlaceType1 | PlaceType2}`, ...`${PlaceType1 | PlaceType2}`[]]);
 
-// Custom geometry types
 const geometry = customType<{ data: string }>({
   dataType() {
     return "geometry(Geometry, 4326)";
@@ -48,7 +47,6 @@ const point = customType<{ data: string }>({
   },
 });
 
-// Settings schema
 export const settingsSchema = pgTable(
   "settings",
   {
@@ -154,7 +152,6 @@ export const gridCellSchema = pgTable(
   ]
 );
 
-// Relations
 export const settingsRelations = relations(settingsSchema, ({ many }) => ({
   businesses: many(businessSchema),
   gridCells: many(gridCellSchema),
