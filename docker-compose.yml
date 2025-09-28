@@ -25,6 +25,8 @@ services:
     container_name: business-finder
     depends_on:
       - business-finder-db
+    networks:
+      - proxy
     build:
       context: ./
       dockerfile: Dockerfile
@@ -38,6 +40,8 @@ services:
     container_name: business-finder-db
     image: postgis/postgis:latest
     restart: always
+    networks:
+      - proxy
     ports:
       - 5437:5432
     environment:
