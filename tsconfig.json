@@ -4,15 +4,15 @@
     "lib": ["ESNext"],
     "target": "ESNext",
     "module": "Preserve",
+    "outDir": "./dist",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": true,
 
     // Bundler mode
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
-    "noEmit": true,
+    "noEmit": false,
 
     // Best practices
     "resolveJsonModule": true,

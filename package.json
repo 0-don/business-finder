@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "build": "tsc",
     "view": "vite",
     "drizzle": "npm run reset && drizzle-kit generate",
     "reset": "tsx ./drizzle/reset-db.ts"
