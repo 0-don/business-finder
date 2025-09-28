@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
 import { Bounds, Point, SettingsConfig } from "../types";
@@ -39,31 +39,6 @@ class DatabaseManager {
     return result;
   }
 
-  async getValidPlacementsExcludingCell(
-    candidates: Point[],
-    radius: number,
-    excludeCellId: number
-  ): Promise<Point[]> {
-    if (!candidates.length) return [];
-
-    const valuesSql = candidates.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
-
-    const result = (await db.execute(sql`
-      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
-      SELECT c.lng, c.lat FROM candidates c
-      JOIN countries co ON co."isoA3" = ${this.settings.countryCode}
-      WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
-      AND NOT EXISTS (
-        SELECT 1 FROM grid_cell gc
-        WHERE gc.country_code = ${this.settings.countryCode}
-        AND gc.id != ${excludeCellId}
-        AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
-      )
-    `)) as unknown as Point[];
-
-    return result;
-  }
-
   async insertCircles(
     circles: Point[],
     radius: number,
@@ -80,48 +55,6 @@ class DatabaseManager {
     }));
 
     await db.insert(gridCellSchema).values(values);
-  }
-
-  async removeCircle(cellId: number): Promise<void> {
-    await db
-      .delete(gridCellSchema)
-      .where(
-        and(
-          eq(gridCellSchema.id, cellId),
-          eq(gridCellSchema.countryCode, this.settings.countryCode)
-        )
-      );
-  }
-
-  async getCircleById(cellId: number): Promise<{
-    center: Point;
-    radius: number;
-    level: number;
-  } | null> {
-    const result = await db
-      .select({
-        lng: sql<number>`ST_X(${gridCellSchema.center})`,
-        lat: sql<number>`ST_Y(${gridCellSchema.center})`,
-        radius: gridCellSchema.radiusMeters,
-        level: gridCellSchema.level,
-      })
-      .from(gridCellSchema)
-      .where(
-        and(
-          eq(gridCellSchema.id, cellId),
-          eq(gridCellSchema.countryCode, this.settings.countryCode)
-        )
-      )
-      .limit(1);
-
-    if (!result.length) return null;
-
-    const row = result[0]!;
-    return {
-      center: { lng: row.lng, lat: row.lat },
-      radius: row.radius,
-      level: row.level,
-    };
   }
 
   async getBounds(): Promise<Bounds> {
@@ -186,107 +119,6 @@ class HexGridGenerator {
       row++;
     }
     return candidates;
-  }
-
-  private generateHexCandidatesInCircle(
-    center: Point,
-    outerRadius: number,
-    innerRadius: number
-  ): Point[] {
-    const candidates: Point[] = [];
-    const { latDeg: dyDeg } = this.metersToDegrees(innerRadius * 1.5, center.lat);
-
-    // Create bounds around the center circle
-    const { latDeg: radiusLatDeg, lngDeg: radiusLngDeg } = this.metersToDegrees(
-      outerRadius,
-      center.lat
-    );
-
-    const bounds = {
-      minX: center.lng - radiusLngDeg,
-      maxX: center.lng + radiusLngDeg,
-      minY: center.lat - radiusLatDeg,
-      maxY: center.lat + radiusLatDeg,
-    };
-
-    let y = bounds.minY;
-    let row = 0;
-
-    while (y <= bounds.maxY) {
-      const { lngDeg: dxDeg } = this.metersToDegrees(innerRadius * 1.73, y);
-      const { lngDeg: radiusDegLng } = this.metersToDegrees(innerRadius * 0.866, y);
-      const xStart = bounds.minX + (row % 2 === 1 ? radiusDegLng : 0);
-
-      let x = xStart;
-      while (x <= bounds.maxX) {
-        // Check if this point is within the outer circle
-        const { latDeg: latDistance, lngDeg: lngDistance } = this.metersToDegrees(1, y);
-        const distance = Math.sqrt(
-          Math.pow((x - center.lng) / lngDistance, 2) +
-          Math.pow((y - center.lat) / latDistance, 2)
-        );
-
-        if (distance <= outerRadius) {
-          candidates.push({ lng: x, lat: y });
-        }
-        x += dxDeg;
-      }
-      y += dyDeg;
-      row++;
-    }
-    return candidates;
-  }
-
-  async splitCircle(cellId: number): Promise<number> {
-    console.log(`Splitting circle ${cellId}`);
-
-    // Get the circle to split
-    const circleToSplit = await this.db.getCircleById(cellId);
-    if (!circleToSplit) {
-      throw new Error(`Circle with ID ${cellId} not found`);
-    }
-
-    const { center, radius, level } = circleToSplit;
-    
-    // Use 50% of original radius (results in ~4x more circles)
-    const newRadius = Math.max(
-      this.settings.minRadius,
-      Math.floor(radius * 0.5)
-    );
-
-    if (newRadius < this.settings.minRadius) {
-      console.log(`New radius ${newRadius}m is below minimum ${this.settings.minRadius}m, skipping split`);
-      return 0;
-    }
-
-    // Generate hex candidates within the original circle
-    const candidates = this.generateHexCandidatesInCircle(
-      center,
-      radius,
-      newRadius
-    );
-
-    // Get valid placements excluding the original circle
-    const placements = await this.db.getValidPlacementsExcludingCell(
-      candidates,
-      newRadius,
-      cellId
-    );
-
-    if (placements.length === 0) {
-      console.log(`No valid placements found for splitting circle ${cellId}`);
-      return 0;
-    }
-
-    // Remove the original circle and insert new ones
-    await this.db.removeCircle(cellId);
-    await this.db.insertCircles(placements, newRadius, level + 1);
-    
-    console.log(
-      `Split complete: replaced 1 circle (${radius}m) with ${placements.length} circles (${newRadius}m each)`
-    );
-
-    return placements.length;
   }
 
   private async canPlaceAtLeastOne(radius: number): Promise<boolean> {
@@ -403,20 +235,6 @@ export async function generateCountryGrid(
     return await generator.generateGrid();
   } catch (error) {
     console.error("Error:", error);
-    throw error;
-  }
-}
-
-export async function splitGridCell(
-  settings: SettingsConfig,
-  cellId: number
-): Promise<number> {
-  const generator = new HexGridGenerator(settings);
-
-  try {
-    return await generator.splitCircle(cellId);
-  } catch (error) {
-    console.error("Error splitting cell:", error);
     throw error;
   }
 }

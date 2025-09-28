@@ -1,7 +1,7 @@
 import "@dotenvx/dotenvx/config";
 import { extractGADMData } from "./lib/extract-gadm-data";
-import { splitGridCell } from "./lib/hex-grid-generator";
 import { getActiveSettings } from "./lib/settings";
+import { splitGridCell } from "./lib/circle-packing";
 
 const settings = await getActiveSettings();
 await extractGADMData(settings);
