@@ -37,7 +37,6 @@ function generateAllCandidates(
   parentRadius: number,
   minRadius: number
 ): Circle[] {
-  const startTime = performance.now();
   const allCandidates: Circle[] = [];
   let currentRadius = parentRadius / 2.5;
 
@@ -84,10 +83,7 @@ function generateAllCandidates(
     }
     currentRadius *= 0.85;
   }
-  
-  const endTime = performance.now();
-  console.log(`  ⏱️  Generated ${allCandidates.length} candidates in ${(endTime - startTime).toFixed(2)}ms`);
-  
+
   return allCandidates.sort((a, b) => b.radius - a.radius);
 }
 
@@ -98,11 +94,9 @@ export async function splitGridCell(
   settings: SettingsConfig,
   cellId: number
 ): Promise<number> {
-  const totalStartTime = performance.now();
-  console.log(`🔄 Starting splitGridCell for cell ID: ${cellId}`);
+  const start = performance.now();
 
-  // Step 1: Fetch the cell to split
-  const fetchCellStart = performance.now();
+  // Fetch the cell to split
   const cellToSplit = await db
     .select({
       id: gridCellSchema.id,
@@ -115,18 +109,14 @@ export async function splitGridCell(
     .where(eq(gridCellSchema.id, cellId))
     .limit(1);
 
-  const fetchCellEnd = performance.now();
-  console.log(`  📍 Fetched cell data in ${(fetchCellEnd - fetchCellStart).toFixed(2)}ms`);
+  if (!cellToSplit.length) return 0;
 
-  if (!cellToSplit.length) {
-    console.log(`  ❌ Cell ${cellId} not found`);
-    return 0;
-  }
   const originalCell = cellToSplit[0]!;
-  console.log(`  📏 Original cell: radius=${originalCell.radius}m, level=${originalCell.level}, pos=(${originalCell.lat.toFixed(4)}, ${originalCell.lng.toFixed(4)})`);
+  console.log(
+    `Starting cell ${cellId} (${originalCell.radius}m, level ${originalCell.level})`
+  );
 
-  // Step 2: Fetch all nearby existing circles (obstacles)
-  const obstaclesStart = performance.now();
+  // Fetch obstacles
   const searchRadius = originalCell.radius * 3;
   const searchBounds = sql`ST_Expand(${sql.raw(`ST_SetSRID(ST_Point(${originalCell.lng}, ${originalCell.lat}), 4326)`)}::geometry, ${searchRadius / 111320})`;
 
@@ -146,23 +136,14 @@ export async function splitGridCell(
       )
     );
 
-  const obstaclesEnd = performance.now();
-  console.log(`  🚧 Fetched ${obstacles.length} obstacle circles in ${(obstaclesEnd - obstaclesStart).toFixed(2)}ms (search radius: ${searchRadius.toFixed(0)}m)`);
-
-  // Step 3: Generate all potential candidates
-  console.log(`  🎯 Generating candidates...`);
+  // Generate candidates and pack circles
   const allCandidates = generateAllCandidates(
     { lng: originalCell.lng, lat: originalCell.lat },
     originalCell.radius,
     settings.minRadius
   );
 
-  // Step 4: Circle packing
-  const packingStart = performance.now();
-  console.log(`  🔍 Starting circle packing...`);
   const packedCircles: Circle[] = [];
-  let rejectedByNew = 0;
-  let rejectedByObstacles = 0;
 
   for (const candidate of allCandidates) {
     let hasOverlap = false;
@@ -174,47 +155,31 @@ export async function splitGridCell(
         candidate.radius + placed.radius
       ) {
         hasOverlap = true;
-        rejectedByNew++;
         break;
       }
     }
     if (hasOverlap) continue;
 
-    // Check overlap against existing obstacles from the database
+    // Check overlap against existing obstacles
     for (const obstacle of obstacles) {
       if (
         getApproximateDistance(candidate.center, obstacle.center) <
         candidate.radius + obstacle.radius
       ) {
         hasOverlap = true;
-        rejectedByObstacles++;
         break;
       }
     }
 
     if (!hasOverlap) {
       packedCircles.push(candidate);
-      
-      // Log progress every 1000 successful placements
-      if (packedCircles.length % 1000 === 0) {
-        console.log(`    ✅ Placed ${packedCircles.length} circles so far...`);
-      }
     }
   }
 
-  const packingEnd = performance.now();
-  console.log(`  📦 Circle packing completed in ${(packingEnd - packingStart).toFixed(2)}ms`);
-  console.log(`    - Placed: ${packedCircles.length} circles`);
-  console.log(`    - Rejected by new circles: ${rejectedByNew}`);
-  console.log(`    - Rejected by obstacles: ${rejectedByObstacles}`);
-
-  // Step 5: Database operations
-  const dbOpsStart = performance.now();
-  console.log(`  🗑️  Deleting original cell...`);
+  // Database operations
   await db.delete(gridCellSchema).where(eq(gridCellSchema.id, cellId));
 
   if (packedCircles.length > 0) {
-    console.log(`  💾 Inserting ${packedCircles.length} new circles...`);
     const valuesToInsert = packedCircles.map((circle) => ({
       center: sql`ST_SetSRID(ST_Point(${circle.center.lng}, ${circle.center.lat}), 4326)`,
       radiusMeters: circle.radius,
@@ -225,18 +190,8 @@ export async function splitGridCell(
     await db.insert(gridCellSchema).values(valuesToInsert);
   }
 
-  const dbOpsEnd = performance.now();
-  const totalTime = performance.now() - totalStartTime;
-
-  console.log(`🎉 Split cell ${cellId} completed in ${totalTime.toFixed(2)}ms:`);
-  console.log(`   - Removed: 1 circle (radius: ${originalCell.radius}m)`);
-  console.log(`   - Added: ${packedCircles.length} circles`);
-  console.log(`   - Performance breakdown:`);
-  console.log(`     * Cell fetch: ${(fetchCellEnd - fetchCellStart).toFixed(2)}ms`);
-  console.log(`     * Obstacle fetch: ${(obstaclesEnd - obstaclesStart).toFixed(2)}ms`);
-  console.log(`     * Candidate generation: ${(packingStart - obstaclesEnd).toFixed(2)}ms`);
-  console.log(`     * Circle packing: ${(packingEnd - packingStart).toFixed(2)}ms`);
-  console.log(`     * Database ops: ${(dbOpsEnd - dbOpsStart).toFixed(2)}ms`);
-
+  console.log(
+    `Completed: ${packedCircles.length} circles in ${(performance.now() - start).toFixed(0)}ms`
+  );
   return packedCircles.length;
 }
