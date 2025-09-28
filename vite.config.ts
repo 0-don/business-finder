@@ -73,7 +73,6 @@ export function injectGridData() {
       const geometry = await getCountryGeometry(settings);
 
       return html
-        .replace("`{{GRID_DATA}}`", "[]")
         .replace("`{{GEOMETRY}}`", JSON.stringify(geometry))
         .replace(
           "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
