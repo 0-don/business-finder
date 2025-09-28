@@ -51,33 +51,3 @@ export async function getActiveSettings(
     minRadius: MINIMIUM_RADIUS,
   };
 }
-
-export async function createOrUpdateSettings(
-  config: SettingsConfig
-): Promise<void> {
-  await db
-    .insert(settingsSchema)
-    .values({
-      countryCode: config.countryCode,
-      language: config.language,
-      placeType: config.placeType,
-      keywords: config.keywords,
-      maxRadius: config.maxRadius,
-      minRadius: config.minRadius,
-      isActive: true,
-    })
-    .onConflictDoUpdate({
-      target: [
-        settingsSchema.countryCode,
-        settingsSchema.language,
-        settingsSchema.placeType,
-        settingsSchema.keywords,
-      ],
-      set: {
-        maxRadius: config.maxRadius,
-        minRadius: config.minRadius,
-        isActive: true,
-        updatedAt: new Date(),
-      },
-    });
-}
