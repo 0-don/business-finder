@@ -37,7 +37,8 @@ export async function createPostgreIndexes() {
     db.execute(sql`
       CREATE EXTENSION IF NOT EXISTS postgis_topology;
     `),
-
+  ]);
+  await Promise.all([
     // Countries indexes
     db.execute(sql`
       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
