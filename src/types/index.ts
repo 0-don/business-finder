@@ -37,15 +37,3 @@ export interface Bounds {
   maxX: number;
   maxY: number;
 }
-
-export interface BoundsRow {
-  min_x: number;
-  min_y: number;
-  max_x: number;
-  max_y: number;
-}
-
-export interface CoordinateRow {
-  lng: number;
-  lat: number;
-}

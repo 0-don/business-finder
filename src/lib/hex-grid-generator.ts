@@ -3,13 +3,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
-import {
-  Bounds,
-  BoundsRow,
-  CoordinateRow,
-  Point,
-  SettingsConfig,
-} from "../types";
+import { Bounds, Point, SettingsConfig } from "../types";
 
 dayjs.extend(relativeTime);
 
@@ -31,18 +25,18 @@ class DatabaseManager {
     const valuesSql = candidates.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
 
     const result = (await db.execute(sql`
-      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
-      SELECT c.lng, c.lat FROM candidates c
-      JOIN countries co ON co."isoA3" = ${this.settings.countryCode}
-      WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
-      AND NOT EXISTS (
-        SELECT 1 FROM grid_cell gc
-        WHERE gc.country_code = ${this.settings.countryCode}
-        AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
-      )
-    `)) as unknown as CoordinateRow[];
+    WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
+    SELECT c.lng, c.lat FROM candidates c
+    JOIN countries co ON co."isoA3" = ${this.settings.countryCode}
+    WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
+    AND NOT EXISTS (
+      SELECT 1 FROM grid_cell gc
+      WHERE gc.country_code = ${this.settings.countryCode}
+      AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
+    )
+  `)) as unknown as Point[];
 
-    return result.map((row) => ({ lng: +row.lng, lat: +row.lat }));
+    return result;
   }
 
   async insertCircles(
@@ -65,10 +59,10 @@ class DatabaseManager {
 
   async getBounds(): Promise<Bounds> {
     const result = (await db.execute(sql`
-      SELECT ST_XMin(geometry) as min_x, ST_YMin(geometry) as min_y, 
-            ST_XMax(geometry) as max_x, ST_YMax(geometry) as max_y
-      FROM countries WHERE "isoA3" = ${this.settings.countryCode}
-    `)) as unknown as BoundsRow[];
+    SELECT ST_XMin(geometry) as "minX", ST_YMin(geometry) as "minY", 
+          ST_XMax(geometry) as "maxX", ST_YMax(geometry) as "maxY"
+    FROM countries WHERE "isoA3" = ${this.settings.countryCode}
+  `)) as unknown as Bounds[];
 
     if (!result.length) {
       throw new Error(
@@ -76,13 +70,7 @@ class DatabaseManager {
       );
     }
 
-    const row = result[0]!;
-    return {
-      minX: Number(row.min_x),
-      minY: Number(row.min_y),
-      maxX: Number(row.max_x),
-      maxY: Number(row.max_y),
-    };
+    return result[0]!;
   }
 }
 
