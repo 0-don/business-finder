@@ -1,6 +1,8 @@
 services:
   business-finder-view:
     container_name: business-finder-view
+    networks:
+      - proxy
     depends_on:
       - business-finder-db
     build:
