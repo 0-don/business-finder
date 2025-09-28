@@ -4,9 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "tsx src/index.ts  ",
+    "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
     "view": "vite",
     "drizzle": "npm run reset && drizzle-kit generate",
     "reset": "tsx ./drizzle/reset-db.ts"

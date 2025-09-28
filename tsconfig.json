@@ -10,8 +10,9 @@
 
     // Bundler mode
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
-    "noEmit": false,
+    "noEmit": true,
 
     // Best practices
     "resolveJsonModule": true,
