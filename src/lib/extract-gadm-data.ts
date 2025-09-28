@@ -108,12 +108,16 @@ async function seedSubdivisions(isoA3?: CountryCode): Promise<void> {
 
   const geoPackage = await GeoPackageAPI.open(GPKG_PATH);
   const featureDao = geoPackage.getFeatureDao("gadm_410");
-  const totalRecords = featureDao.count();
+
+  const resultSet = isoA3
+    ? featureDao.queryForAllEq("GID_0", isoA3)
+    : featureDao.queryForAll();
+
+  const totalRecords = isoA3 ? resultSet.length : featureDao.count();
   const batchSize = Math.ceil(totalRecords / BATCH_SIZE);
 
   let subdivisions: Subdivision[] = [];
   let processedRecords = 0;
-  let filteredRecords = 0;
 
   const subdivisionsBar = new cliProgress.SingleBar(
     {
@@ -126,7 +130,7 @@ async function seedSubdivisions(isoA3?: CountryCode): Promise<void> {
 
   subdivisionsBar.start(totalRecords, 0);
 
-  for (const row of featureDao.queryForEach()) {
+  for (const row of resultSet) {
     const feature = featureDao.getRow(row);
     const { geometry, values } = feature;
 
@@ -136,23 +140,14 @@ async function seedSubdivisions(isoA3?: CountryCode): Promise<void> {
       continue;
     }
 
-    const recordIsoA3 = values.GID_0.toString();
-
-    if (isoA3 && recordIsoA3 !== isoA3) {
-      processedRecords++;
-      subdivisionsBar.update(processedRecords);
-      continue;
-    }
-
     subdivisions.push({
       uid: Number(values.UID),
       countryName: (values.COUNTRY || values.NAME_0)!.toString().trim(),
-      isoA3: recordIsoA3 as CountryCode,
+      isoA3: values.GID_0.toString() as CountryCode,
       geometry: sql`ST_GeomFromText(${geometry.geometry.toWkt()}, 4326)`,
     });
 
     processedRecords++;
-    filteredRecords++;
 
     if (subdivisions.length >= batchSize) {
       await db
@@ -174,7 +169,7 @@ async function seedSubdivisions(isoA3?: CountryCode): Promise<void> {
 
   subdivisionsBar.stop();
   if (isoA3) {
-    console.log(`Processed ${filteredRecords} subdivisions for ${isoA3}`);
+    console.log(`Processed ${processedRecords} subdivisions for ${isoA3}`);
   }
   geoPackage.close();
 }
