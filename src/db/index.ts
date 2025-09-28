@@ -29,58 +29,68 @@ export function conflictUpdateAllExcept<
 }
 
 export async function createPostgreIndexes() {
-  // Countries indexes
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
-    ON countries USING GIST (geometry);
-  `);
+  await Promise.all([
+    db.execute(sql`
+      CREATE EXTENSION IF NOT EXISTS postgis;
+    `),
 
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_iso_btree 
-    ON countries ("isoA3");
-  `);
+    db.execute(sql`
+      CREATE EXTENSION IF NOT EXISTS postgis_topology;
+    `),
 
-  // Grid cell - separate spatial and radius indexes (can't mix in GiST)
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_center_gist 
-    ON grid_cell USING GIST (center);
-  `);
+    // Countries indexes
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
+      ON countries USING GIST (geometry);
+    `),
 
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_radius_btree 
-    ON grid_cell (radius_meters);
-  `);
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_iso_btree 
+      ON countries ("isoA3");
+    `),
 
-  // Grid cell - level index for hierarchical queries
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_btree 
-    ON grid_cell (level);
-  `);
+    // Grid cell - separate spatial and radius indexes (can't mix in GiST)
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_center_gist 
+      ON grid_cell USING GIST (center);
+    `),
 
-  // Grid cell - partial index for unprocessed cells (efficient for background jobs)
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed 
-    ON grid_cell (is_processed) 
-    WHERE is_processed IS FALSE;
-  `);
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_radius_btree 
+      ON grid_cell (radius_meters);
+    `),
 
-  // Grid cell - composite index for level + radius combinations
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_radius 
-    ON grid_cell (level, radius_meters);
-  `);
+    // Grid cell - level index for hierarchical queries
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_btree 
+      ON grid_cell (level);
+    `),
 
-  // GADM subdivisions - geometry index for spatial operations
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_geometry_gist 
-    ON gadm_subdivisions USING GIST (geometry);
-  `);
+    // Grid cell - partial index for unprocessed cells (efficient for background jobs)
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed 
+      ON grid_cell (is_processed) 
+      WHERE is_processed IS FALSE;
+    `),
 
-  // GADM subdivisions - ISO code index for country filtering
-  await db.execute(sql`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_iso_btree 
-    ON gadm_subdivisions ("isoA3");
-  `);
+    // Grid cell - composite index for level + radius combinations
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_level_radius 
+      ON grid_cell (level, radius_meters);
+    `),
+
+    // GADM subdivisions - geometry index for spatial operations
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_geometry_gist 
+      ON gadm_subdivisions USING GIST (geometry);
+    `),
+
+    // GADM subdivisions - ISO code index for country filtering
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_iso_btree 
+      ON gadm_subdivisions ("isoA3");
+    `),
+  ]);
 }
 
 await migrate(db, { migrationsFolder: resolve("drizzle") })
