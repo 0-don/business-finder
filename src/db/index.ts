@@ -94,7 +94,7 @@ export async function createPostgreIndexes() {
   ]);
 }
 
-if (!process.env.NODE_ENV) {
+if (!process.env.DOCKER) {
   await migrate(db, { migrationsFolder: resolve("drizzle") })
     .then(async () => {
       await createPostgreIndexes();
