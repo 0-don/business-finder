@@ -45,6 +45,20 @@ export async function createPostgreIndexes() {
       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_geometry_gist 
       ON gadm_subdivisions USING GIST (geometry);
     `),
+
+    // Add covering index for common spatial queries
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_spatial_covering
+      ON grid_cell USING GIST (center, circle)
+      WHERE is_processed = false;
+    `),
+
+    // Add partial index for unprocessed cells
+    db.execute(sql`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed
+      ON grid_cell (settings_id, level, id)
+      WHERE is_processed = false;
+    `),
   ]);
 }
 
