@@ -16,10 +16,12 @@ export const MAX_RESULTS_PER_CELL = 60;
 export const MINIMIUM_RADIUS = 100; // in meters
 export const MAXIMUM_RADIUS = 50000; // in meters
 
-export const DEFAULT_COUNTRY_CODE: CountryCode = "DEU";
-export const DEFAULT_LANGUAGE: Language = "de";
-export const DEFAULT_PLACE_TYPE: PlaceType = "accounting";
-export const DEFAULT_KEYWORDS = [
+export const DEFAULT_COUNTRY_CODE: CountryCode =
+  process.env.DEFAULT_COUNTRY_CODE || "DEU";
+export const DEFAULT_LANGUAGE: Language = process.env.DEFAULT_LANGUAGE || "de";
+export const DEFAULT_PLACE_TYPE: PlaceType =
+  process.env.DEFAULT_PLACE_TYPE || "accounting";
+export const DEFAULT_KEYWORDS = process.env.DEFAULT_KEYWORDS?.split(",") || [
   "tax",
   "steuer",
   "steuerberater",
