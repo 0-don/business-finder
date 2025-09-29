@@ -1,4 +1,3 @@
-// vite.config.ts (continued)
 import "@dotenvx/dotenvx/config";
 import { sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";

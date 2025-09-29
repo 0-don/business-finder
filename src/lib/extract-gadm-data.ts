@@ -208,7 +208,6 @@ async function createCountriesFromSubdivisions(
       .values({
         name: country.country_name,
         isoA3: country.iso_a3,
-        // Use ST_Union without ST_Multi since geometry type is now generic
         geometry: sql`(
           SELECT ST_Union(geometry)
           FROM gadm_subdivisions 
