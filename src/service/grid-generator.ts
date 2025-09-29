@@ -42,7 +42,7 @@ export class GridGenerator {
 
       this.newCount += valid.length;
       console.log(
-        `[${dayjs().format("HH:mm:ss")}] R${radius}m: ${valid.length} circles (total: ${await this.repo.getTotalCount()}) - ${dayjs().from(this.startTime)}`
+        `[${dayjs().format("HH:mm:ss")}] ${radius}m: ${valid.length} circles (total: ${await this.repo.getTotalCount()}) - ${dayjs().from(this.startTime)}`
       );
 
       level++;

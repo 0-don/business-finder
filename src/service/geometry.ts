@@ -1,85 +1,74 @@
+import * as turf from "@turf/turf";
 import { Bounds, Circle, Point } from "../types";
 
 export class Geometry {
   static distance(p1: Point, p2: Point): number {
-    const R = 6371e3;
-    const rad1 = (p1.lat * Math.PI) / 180;
-    const rad2 = (p2.lat * Math.PI) / 180;
-    const dLat = ((p2.lat - p1.lat) * Math.PI) / 180;
-    const dLng = ((p2.lng - p1.lng) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(rad1) * Math.cos(rad2) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  static toDegrees(meters: number, lat = 0) {
-    return {
-      lat: (meters * 360) / 40008000,
-      lng: (meters * 360) / (40075000 * Math.cos((lat * Math.PI) / 180)),
-    };
+    const from = turf.point([p1.lng, p1.lat]);
+    const to = turf.point([p2.lng, p2.lat]);
+    return turf.distance(from, to, { units: "meters" });
   }
 
   static generateHexGrid(bounds: Bounds, radius: number): Point[] {
-    const candidates: Point[] = [];
-    const dyDeg = this.toDegrees(radius * 1.5).lat;
-    let y = bounds.minY,
-      row = 0;
+    const bbox: [number, number, number, number] = [
+      bounds.minX,
+      bounds.minY,
+      bounds.maxX,
+      bounds.maxY,
+    ];
+    const cellSide = (radius * 2) / Math.sqrt(3);
 
-    while (y <= bounds.maxY) {
-      const { lng: dxDeg } = this.toDegrees(radius * 1.73, y);
-      const { lng: offsetDeg } = this.toDegrees(radius * 0.866, y);
-      let x = bounds.minX + (row % 2 ? offsetDeg : 0);
+    const hexGrid = turf.hexGrid(bbox, cellSide, { units: "meters" });
 
-      while (x <= bounds.maxX) {
-        candidates.push({ lng: x, lat: y });
-        x += dxDeg;
-      }
-      y += dyDeg;
-      row++;
-    }
-    return candidates;
+    return hexGrid.features.map((feature) => {
+      const center = turf.centroid(feature);
+      return {
+        lng: center.geometry.coordinates[0]!,
+        lat: center.geometry.coordinates[1]!,
+      };
+    });
   }
 
   static generatePackCandidates(
     parent: Point,
     parentRadius: number,
     minRadius: number
-  ) {
+  ): Circle[] {
     const candidates: Circle[] = [];
     let radius = parentRadius / 2.5;
 
+    const parentPoint = turf.point([parent.lng, parent.lat]);
+    const parentCircle = turf.circle(parentPoint, parentRadius, {
+      units: "meters",
+    });
+
     while (radius >= minRadius) {
-      const latRad = parentRadius / 111320;
-      const lngRad =
-        parentRadius / (111320 * Math.cos((parent.lat * Math.PI) / 180));
-      const latStep = (radius * 1.5) / 111320;
-      let row = 0;
+      const cellSide = (radius * 2) / Math.sqrt(3);
+      const searchBuffer = turf.circle(parentPoint, parentRadius, {
+        units: "meters",
+      });
+      const bbox = turf.bbox(searchBuffer);
 
-      for (
-        let lat = parent.lat - latRad;
-        lat <= parent.lat + latRad;
-        lat += latStep
-      ) {
-        const lngStep =
-          (radius * 1.732) / (111320 * Math.cos((lat * Math.PI) / 180));
-        const offset =
-          (radius * 0.866) / (111320 * Math.cos((lat * Math.PI) / 180));
+      const hexGrid = turf.hexGrid(bbox, cellSide, { units: "meters" });
 
-        for (
-          let lng = parent.lng - lngRad + (row % 2 ? offset : 0);
-          lng <= parent.lng + lngRad;
-          lng += lngStep
-        ) {
-          const center = { lng, lat };
-          if (this.distance(center, parent) + radius <= parentRadius) {
-            candidates.push({ center, radius });
-          }
+      for (const feature of hexGrid.features) {
+        const center = turf.centroid(feature);
+        const centerPoint: Point = {
+          lng: center.geometry.coordinates[0]!,
+          lat: center.geometry.coordinates[1]!,
+        };
+
+        const candidateCircle = turf.circle(center, radius, {
+          units: "meters",
+        });
+
+        if (turf.booleanWithin(candidateCircle, parentCircle)) {
+          candidates.push({ center: centerPoint, radius });
         }
-        row++;
       }
+
       radius *= 0.85;
     }
+
     return candidates.sort((a, b) => b.radius - a.radius);
   }
 
@@ -90,13 +79,37 @@ export class Geometry {
     const packed: Circle[] = [];
 
     for (const candidate of candidates) {
-      const hasOverlap = [...packed, ...obstacles].some(
-        (other) =>
-          this.distance(candidate.center, other.center) <
-          candidate.radius + other.radius
-      );
-      if (!hasOverlap) packed.push(candidate);
+      const candidatePoint = turf.point([
+        candidate.center.lng,
+        candidate.center.lat,
+      ]);
+      const candidateCircle = turf.circle(candidatePoint, candidate.radius, {
+        units: "meters",
+      });
+
+      let hasOverlap = false;
+
+      for (const other of [...packed, ...obstacles]) {
+        const otherPoint = turf.point([other.center.lng, other.center.lat]);
+        const otherCircle = turf.circle(otherPoint, other.radius, {
+          units: "meters",
+        });
+
+        if (
+          turf.booleanOverlap(candidateCircle, otherCircle) ||
+          turf.booleanContains(candidateCircle, otherCircle) ||
+          turf.booleanContains(otherCircle, candidateCircle)
+        ) {
+          hasOverlap = true;
+          break;
+        }
+      }
+
+      if (!hasOverlap) {
+        packed.push(candidate);
+      }
     }
+
     return packed;
   }
 }
