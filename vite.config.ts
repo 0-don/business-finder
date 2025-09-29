@@ -71,13 +71,10 @@ export function injectGridData() {
     },
     transformIndexHtml: async (html: string) => {
       const settings = await getActiveSettings();
-      const repo = new GridRepository(settings);
+      const geometry = await new GridRepository(settings).getCountryGeometry();
 
       return html
-        .replace(
-          "`{{GEOMETRY}}`",
-          JSON.stringify(await repo.getCountryGeometry())
-        )
+        .replace("`{{GEOMETRY}}`", JSON.stringify(geometry))
         .replace(
           "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
           process.env.GOOGLE_MAPS_JAVASCRIPT_API
