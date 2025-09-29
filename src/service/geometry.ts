@@ -1,92 +1,88 @@
-import * as turf from "@turf/turf";
 import { Bounds, Circle, Point } from "../types";
 
 export class Geometry {
-  /**
-   * Calculate geodesic distance between two points using Turf.js
-   * More accurate than Haversine approximation for large distances
-   */
   static distance(p1: Point, p2: Point): number {
-    const from = turf.point([p1.lng, p1.lat]);
-    const to = turf.point([p2.lng, p2.lat]);
-    return turf.distance(from, to, { units: "meters" });
+    const R = 6371e3;
+    const rad1 = (p1.lat * Math.PI) / 180;
+    const rad2 = (p2.lat * Math.PI) / 180;
+    const dLat = ((p2.lat - p1.lat) * Math.PI) / 180;
+    const dLng = ((p2.lng - p1.lng) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad1) * Math.cos(rad2) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  /**
-   * Generate hexagonal grid coverage for a bounding box
-   * Uses Turf's optimized hex grid algorithm
-   */
+  static toDegrees(meters: number, lat = 0) {
+    return {
+      lat: (meters * 360) / 40008000,
+      lng: (meters * 360) / (40075000 * Math.cos((lat * Math.PI) / 180)),
+    };
+  }
+
   static generateHexGrid(bounds: Bounds, radius: number): Point[] {
-    const bbox: [number, number, number, number] = [
-      bounds.minX,
-      bounds.minY,
-      bounds.maxX,
-      bounds.maxY,
-    ];
+    const candidates: Point[] = [];
+    const dyDeg = this.toDegrees(radius * 1.5).lat;
+    let y = bounds.minY,
+      row = 0;
 
-    // Calculate hex cell side length from desired radius
-    const cellSide = (radius * 2) / Math.sqrt(3);
-    const hexGrid = turf.hexGrid(bbox, cellSide, { units: "meters" });
+    while (y <= bounds.maxY) {
+      const { lng: dxDeg } = this.toDegrees(radius * 1.73, y);
+      const { lng: offsetDeg } = this.toDegrees(radius * 0.866, y);
+      let x = bounds.minX + (row % 2 ? offsetDeg : 0);
 
-    return hexGrid.features.map((feature) => {
-      const center = turf.centroid(feature);
-      return {
-        lng: center.geometry.coordinates[0]!,
-        lat: center.geometry.coordinates[1]!,
-      };
-    });
+      while (x <= bounds.maxX) {
+        candidates.push({ lng: x, lat: y });
+        x += dxDeg;
+      }
+      y += dyDeg;
+      row++;
+    }
+    return candidates;
   }
 
-  /**
-   * Generate candidate circles for packing within a parent circle
-   * Uses hexagonal packing pattern for optimal space utilization
-   */
   static generatePackCandidates(
     parent: Point,
     parentRadius: number,
     minRadius: number
-  ): Circle[] {
+  ) {
     const candidates: Circle[] = [];
     let radius = parentRadius / 2.5;
 
     while (radius >= minRadius) {
-      // Create search area around parent
-      const cellSide = (radius * 2) / Math.sqrt(3);
-      const searchArea = turf.circle(
-        turf.point([parent.lng, parent.lat]),
-        parentRadius,
-        { units: "meters" }
-      );
-      const bbox = turf.bbox(searchArea);
+      const latRad = parentRadius / 111320;
+      const lngRad =
+        parentRadius / (111320 * Math.cos((parent.lat * Math.PI) / 180));
+      const latStep = (radius * 1.5) / 111320;
+      let row = 0;
 
-      // Generate hex grid within search area
-      const hexGrid = turf.hexGrid(bbox, cellSide, { units: "meters" });
+      for (
+        let lat = parent.lat - latRad;
+        lat <= parent.lat + latRad;
+        lat += latStep
+      ) {
+        const lngStep =
+          (radius * 1.732) / (111320 * Math.cos((lat * Math.PI) / 180));
+        const offset =
+          (radius * 0.866) / (111320 * Math.cos((lat * Math.PI) / 180));
 
-      for (const feature of hexGrid.features) {
-        const center = turf.centroid(feature);
-        const centerPoint: Point = {
-          lng: center.geometry.coordinates[0]!,
-          lat: center.geometry.coordinates[1]!,
-        };
-
-        // Fast distance check instead of polygon containment
-        const distanceToParent = this.distance(centerPoint, parent);
-        if (distanceToParent + radius <= parentRadius) {
-          candidates.push({ center: centerPoint, radius });
+        for (
+          let lng = parent.lng - lngRad + (row % 2 ? offset : 0);
+          lng <= parent.lng + lngRad;
+          lng += lngStep
+        ) {
+          const center = { lng, lat };
+          if (this.distance(center, parent) + radius <= parentRadius) {
+            candidates.push({ center, radius });
+          }
         }
+        row++;
       }
-
-      // Progressively smaller circles for tighter packing
       radius *= 0.85;
     }
-
     return candidates.sort((a, b) => b.radius - a.radius);
   }
 
-  /**
-   * Pack circles without overlaps using greedy algorithm
-   * Fast implementation using distance-based overlap detection
-   */
   static packCircles(
     candidates: Circle[],
     obstacles: Array<{ center: Point; radius: number }>
@@ -94,24 +90,13 @@ export class Geometry {
     const packed: Circle[] = [];
 
     for (const candidate of candidates) {
-      let hasOverlap = false;
-
-      // Check against all existing circles and obstacles
-      for (const other of [...packed, ...obstacles]) {
-        const distance = this.distance(candidate.center, other.center);
-
-        // Two circles overlap if distance between centers < sum of radii
-        if (distance < candidate.radius + other.radius) {
-          hasOverlap = true;
-          break;
-        }
-      }
-
-      if (!hasOverlap) {
-        packed.push(candidate);
-      }
+      const hasOverlap = [...packed, ...obstacles].some(
+        (other) =>
+          this.distance(candidate.center, other.center) <
+          candidate.radius + other.radius
+      );
+      if (!hasOverlap) packed.push(candidate);
     }
-
     return packed;
   }
 }
