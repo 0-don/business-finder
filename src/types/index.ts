@@ -37,3 +37,8 @@ export interface Bounds {
   maxX: number;
   maxY: number;
 }
+
+export interface Circle {
+  center: Point;
+  radius: number;
+}
