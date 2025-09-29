@@ -34,29 +34,10 @@ export async function createPostgreIndexes() {
       ON business USING GIST (location);
     `),
 
-    // Separate btree index for country filtering
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_country_code 
-      ON business (country_code);
-    `),
-
     // Grid cell spatial indexes (removed country_code from GIST index)
     db.execute(sql`
       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_circle_gist 
       ON grid_cell USING GIST (circle);
-    `),
-
-    // Separate btree index for grid cell country filtering
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_country_code 
-      ON grid_cell (country_code);
-    `),
-
-    // Grid cell processing index
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed 
-      ON grid_cell (country_code, is_processed) 
-      WHERE is_processed = false;
     `),
 
     // GADM subdivisions spatial index
