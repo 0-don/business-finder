@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";
 import { db } from "./src/db/index.js";
 import { gridCellSchema } from "./src/db/schema.js";
-
 import { GridRepository } from "./src/lib/grid-repositroy.js";
 import { getActiveSettings } from "./src/lib/settings.js";
 

@@ -174,6 +174,6 @@ export class GridRepository {
       .where(eq(countries.isoA3, this.settings.countryCode))
       .limit(1);
 
-    return result?.geometry ? JSON.parse(result.geometry) : null;
+    return result?.geometry;
   }
 }
