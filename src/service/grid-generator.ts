@@ -55,6 +55,7 @@ export class GridGenerator {
   }
 
   async split(cellId: number): Promise<number> {
+    const startTime = Date.now();
     const cell = await this.repo.getCell(cellId);
     if (!cell) return 0;
 
@@ -74,7 +75,8 @@ export class GridGenerator {
     await this.repo.deleteCell(cellId);
     if (packed.length > 0) await this.repo.insertCells(packed, cell.level + 1);
 
-    console.log(`Split complete: ${packed.length} new circles`);
+    const duration = Date.now() - startTime;
+    console.log(`Split complete: ${packed.length} new circles (${duration}ms)`);
     return packed.length;
   }
 
