@@ -24,7 +24,7 @@ CREATE TABLE "business" (
 	"phone_number" text,
 	"international_phone_number" text,
 	"utc_offset" integer,
-	"country_code" "country_code" NOT NULL,
+	"settings_id" integer NOT NULL,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now(),
 	CONSTRAINT "business_place_id_unique" UNIQUE("place_id")
@@ -57,7 +57,7 @@ CREATE TABLE "grid_cell" (
 	"current_page" integer DEFAULT 0,
 	"next_page_token" text,
 	"total_results" integer DEFAULT 0,
-	"country_code" "country_code" NOT NULL,
+	"settings_id" integer NOT NULL,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now()
 );
@@ -75,11 +75,12 @@ CREATE TABLE "settings" (
 	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
+ALTER TABLE "business" ADD CONSTRAINT "business_settings_id_settings_id_fk" FOREIGN KEY ("settings_id") REFERENCES "public"."settings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "grid_cell" ADD CONSTRAINT "grid_cell_settings_id_settings_id_fk" FOREIGN KEY ("settings_id") REFERENCES "public"."settings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_place_id" ON "business" USING btree ("place_id");--> statement-breakpoint
-CREATE INDEX "idx_location_gist" ON "business" USING gist ("location");--> statement-breakpoint
-CREATE INDEX "idx_business_country" ON "business" USING btree ("country_code");--> statement-breakpoint
+CREATE INDEX "idx_business_settings" ON "business" USING btree ("settings_id");--> statement-breakpoint
 CREATE INDEX "idx_grid_center_gist" ON "grid_cell" USING gist ("center");--> statement-breakpoint
 CREATE INDEX "idx_grid_circle_gist" ON "grid_cell" USING gist ("circle");--> statement-breakpoint
-CREATE INDEX "idx_grid_country" ON "grid_cell" USING btree ("country_code");--> statement-breakpoint
+CREATE INDEX "idx_grid_settings" ON "grid_cell" USING btree ("settings_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_settings_unique_config" ON "settings" USING btree ("country_code","language","place_type","keywords");--> statement-breakpoint
 CREATE INDEX "idx_settings_active_lookup" ON "settings" USING btree ("country_code","is_active");

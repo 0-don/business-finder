@@ -13,7 +13,7 @@ class DatabaseManager {
   async clearGrid(): Promise<void> {
     await db
       .delete(gridCellSchema)
-      .where(eq(gridCellSchema.countryCode, this.settings.countryCode));
+      .where(eq(gridCellSchema.settingsId, this.settings.id));
   }
 
   async getValidPlacements(
@@ -31,7 +31,7 @@ class DatabaseManager {
       WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
       AND NOT EXISTS (
         SELECT 1 FROM grid_cell gc
-        WHERE gc.country_code = ${this.settings.countryCode}
+        WHERE gc.settings_id = ${this.settings.id}
         AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
       )
     `)) as unknown as Point[];
@@ -51,7 +51,7 @@ class DatabaseManager {
       radiusMeters: radius,
       circle: sql`ST_Buffer(ST_Point(${c.lng}, ${c.lat}, 4326)::geography, ${radius})::geometry`,
       level,
-      countryCode: this.settings.countryCode,
+      settingsId: this.settings.id,
     }));
 
     await db.insert(gridCellSchema).values(values);
@@ -148,7 +148,7 @@ class HexGridGenerator {
     const result = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(gridCellSchema)
-      .where(eq(gridCellSchema.countryCode, this.settings.countryCode));
+      .where(eq(gridCellSchema.settingsId, this.settings.id));
     return result[0]?.count || 0;
   }
 
@@ -158,7 +158,7 @@ class HexGridGenerator {
         minRadius: sql<number>`MIN(${gridCellSchema.radiusMeters})`,
       })
       .from(gridCellSchema)
-      .where(eq(gridCellSchema.countryCode, this.settings.countryCode))
+      .where(eq(gridCellSchema.settingsId, this.settings.id))
       .limit(1);
 
     return result[0]?.minRadius || null;

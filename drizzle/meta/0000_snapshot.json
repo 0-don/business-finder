@@ -1,5 +1,5 @@
 {
-  "id": "7d5b0c08-b7d4-4f37-a542-b6b583b5b627",
+  "id": "a103abc9-f775-4ffe-a932-bd13331f7558",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -141,10 +141,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "country_code": {
-          "name": "country_code",
-          "type": "country_code",
-          "typeSchema": "public",
+        "settings_id": {
+          "name": "settings_id",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -179,26 +178,11 @@
           "method": "btree",
           "with": {}
         },
-        "idx_location_gist": {
-          "name": "idx_location_gist",
+        "idx_business_settings": {
+          "name": "idx_business_settings",
           "columns": [
             {
-              "expression": "location",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gist",
-          "with": {}
-        },
-        "idx_business_country": {
-          "name": "idx_business_country",
-          "columns": [
-            {
-              "expression": "country_code",
+              "expression": "settings_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -210,7 +194,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "business_settings_id_settings_id_fk": {
+          "name": "business_settings_id_settings_id_fk",
+          "tableFrom": "business",
+          "tableTo": "settings",
+          "columnsFrom": [
+            "settings_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "business_place_id_unique": {
@@ -384,10 +382,9 @@
           "notNull": false,
           "default": 0
         },
-        "country_code": {
-          "name": "country_code",
-          "type": "country_code",
-          "typeSchema": "public",
+        "settings_id": {
+          "name": "settings_id",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -437,11 +434,11 @@
           "method": "gist",
           "with": {}
         },
-        "idx_grid_country": {
-          "name": "idx_grid_country",
+        "idx_grid_settings": {
+          "name": "idx_grid_settings",
           "columns": [
             {
-              "expression": "country_code",
+              "expression": "settings_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -453,7 +450,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "grid_cell_settings_id_settings_id_fk": {
+          "name": "grid_cell_settings_id_settings_id_fk",
+          "tableFrom": "grid_cell",
+          "tableTo": "settings",
+          "columnsFrom": [
+            "settings_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

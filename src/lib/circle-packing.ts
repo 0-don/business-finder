@@ -8,11 +8,8 @@ interface Circle {
   radius: number;
 }
 
-/**
- * Calculates the approximate distance between two points in meters.
- */
 function getApproximateDistance(p1: Point, p2: Point): number {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3;
   const radLat1 = (p1.lat * Math.PI) / 180;
   const radLat2 = (p2.lat * Math.PI) / 180;
   const deltaLat = ((p2.lat - p1.lat) * Math.PI) / 180;
@@ -29,9 +26,6 @@ function getApproximateDistance(p1: Point, p2: Point): number {
   return R * c;
 }
 
-/**
- * Generates all potential hexagonal candidates, pre-filtered to be within the parent circle.
- */
 function generateAllCandidates(
   parentCenter: Point,
   parentRadius: number,
@@ -87,16 +81,12 @@ function generateAllCandidates(
   return allCandidates.sort((a, b) => b.radius - a.radius);
 }
 
-/**
- * Replaces a single grid cell with a tightly packed set of smaller cells.
- */
 export async function splitGridCell(
   settings: SettingsConfig,
   cellId: number
 ): Promise<number> {
   const start = performance.now();
 
-  // Fetch the cell to split
   const cellToSplit = await db
     .select({
       id: gridCellSchema.id,
@@ -116,7 +106,6 @@ export async function splitGridCell(
     `Starting cell ${cellId} (${originalCell.radius}m, level ${originalCell.level})`
   );
 
-  // Fetch obstacles
   const searchRadius = originalCell.radius * 3;
   const searchBounds = sql`ST_Expand(${sql.raw(`ST_SetSRID(ST_Point(${originalCell.lng}, ${originalCell.lat}), 4326)`)}::geometry, ${searchRadius / 111320})`;
 
@@ -136,7 +125,6 @@ export async function splitGridCell(
       )
     );
 
-  // Generate candidates and pack circles
   const allCandidates = generateAllCandidates(
     { lng: originalCell.lng, lat: originalCell.lat },
     originalCell.radius,
@@ -148,7 +136,6 @@ export async function splitGridCell(
   for (const candidate of allCandidates) {
     let hasOverlap = false;
 
-    // Check overlap against newly placed circles
     for (const placed of packedCircles) {
       if (
         getApproximateDistance(candidate.center, placed.center) <
@@ -160,7 +147,6 @@ export async function splitGridCell(
     }
     if (hasOverlap) continue;
 
-    // Check overlap against existing obstacles
     for (const obstacle of obstacles) {
       if (
         getApproximateDistance(candidate.center, obstacle.center) <
@@ -176,7 +162,6 @@ export async function splitGridCell(
     }
   }
 
-  // Database operations
   await db.delete(gridCellSchema).where(eq(gridCellSchema.id, cellId));
 
   if (packedCircles.length > 0) {
@@ -185,7 +170,7 @@ export async function splitGridCell(
       radiusMeters: circle.radius,
       circle: sql`ST_Buffer(ST_SetSRID(ST_Point(${circle.center.lng}, ${circle.center.lat}), 4326)::geography, ${circle.radius})::geometry`,
       level: originalCell.level + 1,
-      countryCode: settings.countryCode,
+      settingsId: settings.id,
     }));
     await db.insert(gridCellSchema).values(valuesToInsert);
   }

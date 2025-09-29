@@ -19,7 +19,7 @@ async function getNextUnprocessedCell(settings: SettingsConfig) {
     .from(gridCellSchema)
     .where(
       and(
-        eq(gridCellSchema.countryCode, settings.countryCode),
+        eq(gridCellSchema.settingsId, settings.id),
         eq(gridCellSchema.isProcessed, false)
       )
     )
@@ -139,7 +139,7 @@ async function searchGridCell(
             internationalPhoneNumber:
               details?.international_phone_number || null,
             utcOffset: details?.utc_offset || null,
-            countryCode: settings.countryCode,
+            settingsId: settings.id,
           })
           .onConflictDoNothing();
       }

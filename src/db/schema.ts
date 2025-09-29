@@ -114,7 +114,9 @@ export const businessSchema = pgTable(
     phoneNumber: text("phone_number"),
     internationalPhoneNumber: text("international_phone_number"),
     utcOffset: integer("utc_offset"),
-    countryCode: countryCodeEnum("country_code").notNull(),
+    settingsId: integer("settings_id")
+      .notNull()
+      .references(() => settingsSchema.id),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -122,8 +124,7 @@ export const businessSchema = pgTable(
   },
   (table) => [
     uniqueIndex("idx_place_id").on(table.placeId),
-    index("idx_location_gist").using("gist", table.location),
-    index("idx_business_country").on(table.countryCode),
+    index("idx_business_settings").on(table.settingsId),
   ]
 );
 
@@ -139,7 +140,9 @@ export const gridCellSchema = pgTable(
     currentPage: integer("current_page").default(0),
     nextPageToken: text("next_page_token"),
     totalResults: integer("total_results").default(0),
-    countryCode: countryCodeEnum("country_code").notNull(),
+    settingsId: integer("settings_id")
+      .notNull()
+      .references(() => settingsSchema.id),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -148,7 +151,7 @@ export const gridCellSchema = pgTable(
   (table) => [
     index("idx_grid_center_gist").using("gist", table.center),
     index("idx_grid_circle_gist").using("gist", table.circle),
-    index("idx_grid_country").on(table.countryCode),
+    index("idx_grid_settings").on(table.settingsId),
   ]
 );
 
@@ -159,14 +162,14 @@ export const settingsRelations = relations(settingsSchema, ({ many }) => ({
 
 export const businessRelations = relations(businessSchema, ({ one }) => ({
   settings: one(settingsSchema, {
-    fields: [businessSchema.countryCode],
-    references: [settingsSchema.countryCode],
+    fields: [businessSchema.settingsId],
+    references: [settingsSchema.id],
   }),
 }));
 
 export const gridCellRelations = relations(gridCellSchema, ({ one }) => ({
   settings: one(settingsSchema, {
-    fields: [gridCellSchema.countryCode],
-    references: [settingsSchema.countryCode],
+    fields: [gridCellSchema.settingsId],
+    references: [settingsSchema.id],
   }),
 }));
