@@ -1,7 +1,7 @@
 import { and, eq, not, sql } from "drizzle-orm";
 import { db } from "../db";
 import { businessSchema, countries, gridCellSchema } from "../db/schema";
-import { Bounds, CountryCode, Point, SettingsConfig } from "../types";
+import { Bounds, CountryCode, Point, SettingsConfig, Viewport } from "../types";
 
 export class GridRepository {
   constructor(private settings: SettingsConfig) {}
@@ -74,6 +74,29 @@ export class GridRepository {
       .where(eq(gridCellSchema.id, cellId))
       .limit(1);
     return cell;
+  }
+
+  async getCells(viewport: Viewport, minRadius: number) {
+    return await db
+      .select({
+        id: gridCellSchema.id,
+        lat: sql<number>`ST_Y(${gridCellSchema.center})`,
+        lng: sql<number>`ST_X(${gridCellSchema.center})`,
+        radius: gridCellSchema.radiusMeters,
+        level: gridCellSchema.level,
+      })
+      .from(gridCellSchema)
+      .where(
+        sql`
+                ST_Intersects(
+                  ${gridCellSchema.center},
+                  ST_MakeEnvelope(${viewport.west}, ${viewport.south}, 
+                                ${viewport.east}, ${viewport.north}, 4326)
+                )
+                AND ${gridCellSchema.radiusMeters} >= ${minRadius}
+                AND ${gridCellSchema.settingsId} = ${this.settings.id}
+              `
+      );
   }
 
   async getObstacles(center: Point, searchRadius: number, excludeId?: number) {

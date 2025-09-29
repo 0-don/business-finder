@@ -1,10 +1,8 @@
 import "@dotenvx/dotenvx/config";
-import { sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";
-import { db } from "./src/db/index.js";
-import { gridCellSchema } from "./src/db/schema.js";
 import { GridRepository } from "./src/lib/grid-repositroy.js";
 import { getActiveSettings } from "./src/lib/settings.js";
+import process from "process";
 
 export function injectGridData() {
   return {
@@ -21,12 +19,6 @@ export function injectGridData() {
         const zoom = parseInt(url.searchParams.get("zoom") || "6");
 
         const buffer = 0.45;
-        const expandedBounds = {
-          north: bounds.north + buffer,
-          south: bounds.south - buffer,
-          east: bounds.east + buffer,
-          west: bounds.west - buffer,
-        };
 
         let minRadius = 200;
         if (zoom <= 6) minRadius = 5000;
@@ -38,26 +30,15 @@ export function injectGridData() {
 
         const settings = await getActiveSettings();
         try {
-          const cells = await db
-            .select({
-              id: gridCellSchema.id,
-              lat: sql<number>`ST_Y(${gridCellSchema.center})`,
-              lng: sql<number>`ST_X(${gridCellSchema.center})`,
-              radius: gridCellSchema.radiusMeters,
-              level: gridCellSchema.level,
-            })
-            .from(gridCellSchema)
-            .where(
-              sql`
-                ST_Intersects(
-                  ${gridCellSchema.center},
-                  ST_MakeEnvelope(${expandedBounds.west}, ${expandedBounds.south}, 
-                                ${expandedBounds.east}, ${expandedBounds.north}, 4326)
-                )
-                AND ${gridCellSchema.radiusMeters} >= ${minRadius}
-                AND ${gridCellSchema.settingsId} = ${settings.id}
-              `
-            );
+          const cells = await new GridRepository(settings).getCells(
+            {
+              north: bounds.north + buffer,
+              south: bounds.south - buffer,
+              east: bounds.east + buffer,
+              west: bounds.west - buffer,
+            },
+            minRadius
+          );
 
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(cells));

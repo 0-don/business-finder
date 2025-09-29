@@ -42,3 +42,10 @@ export interface Circle {
   center: Point;
   radius: number;
 }
+
+export interface Viewport {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
