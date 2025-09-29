@@ -36,7 +36,7 @@ export class CellProcessor {
     if (!cell) return 0;
 
     console.log(
-      `Searching cell ${cellId} (L${cell.level}) - ${cell.lat.toFixed(3)},${cell.lng.toFixed(3)} R:${cell.radius}m`
+      `Searching cell ${cellId} (L${cell.level}) - ${cell.lat.toFixed(3)},${cell.lng.toFixed(3)} :${cell.radius}m`
     );
     let page = cell.currentPage || 0;
     let token = cell.nextPageToken;
