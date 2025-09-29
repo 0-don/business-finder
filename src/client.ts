@@ -48,7 +48,7 @@ export async function getPlaceDetails(placeId: string) {
           "utc_offset",
         ],
         language: settings.language as GoogleMapsLanguage,
-        key: process.env.GOOGLE_PLACES_API!,
+        key: process.env.GOOGLE_PLACES_API,
       },
     });
     return response.data.result;
@@ -74,7 +74,7 @@ export async function getPlacesNearby(
         type: settings.placeType,
         keyword: settings.keywords.join("|"),
         language: settings.language as GoogleMapsLanguage,
-        key: process.env.GOOGLE_PLACES_API!,
+        key: process.env.GOOGLE_PLACES_API,
         ...(nextPageToken && { pagetoken: nextPageToken }),
       },
     });
