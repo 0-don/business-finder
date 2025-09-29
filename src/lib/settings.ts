@@ -17,8 +17,7 @@ export async function getActiveSettings(
   placeType: PlaceType = DEFAULT_PLACE_TYPE,
   keywords: string[] = DEFAULT_KEYWORDS
 ): Promise<SettingsConfig> {
-  // First try to find existing settings
-  const settings = await db
+  const [existing] = await db
     .select()
     .from(settingsSchema)
     .where(
@@ -32,26 +31,24 @@ export async function getActiveSettings(
     )
     .limit(1);
 
-  // Return existing settings if found
-  if (settings[0]) {
+  if (existing) {
     return {
-      id: settings[0].id,
-      countryCode: settings[0].countryCode,
-      language: settings[0].language,
-      placeType: settings[0].placeType,
-      keywords: settings[0].keywords,
-      maxRadius: settings[0].maxRadius || MAXIMUM_RADIUS,
-      minRadius: settings[0].minRadius || MINIMIUM_RADIUS,
+      id: existing.id,
+      countryCode: existing.countryCode,
+      language: existing.language,
+      placeType: existing.placeType,
+      keywords: existing.keywords,
+      maxRadius: existing.maxRadius ?? MAXIMUM_RADIUS,
+      minRadius: existing.minRadius ?? MINIMIUM_RADIUS,
     };
   }
 
-  // Create new settings if none exist
-  const [newSettings] = await db
+  const [created] = await db
     .insert(settingsSchema)
     .values({
-      countryCode: countryCode || DEFAULT_COUNTRY_CODE,
-      language: language || DEFAULT_LANGUAGE,
-      placeType: placeType || DEFAULT_PLACE_TYPE,
+      countryCode,
+      language,
+      placeType,
       keywords: keywords.length ? keywords : DEFAULT_KEYWORDS,
       maxRadius: MAXIMUM_RADIUS,
       minRadius: MINIMIUM_RADIUS,
@@ -59,13 +56,15 @@ export async function getActiveSettings(
     })
     .returning();
 
+  if (!created) throw new Error("Failed to create settings");
+
   return {
-    id: newSettings!.id,
-    countryCode: newSettings!.countryCode,
-    language: newSettings!.language,
-    placeType: newSettings!.placeType,
-    keywords: newSettings!.keywords,
-    maxRadius: newSettings!.maxRadius || MAXIMUM_RADIUS,
-    minRadius: newSettings!.minRadius || MINIMIUM_RADIUS,
+    id: created.id,
+    countryCode: created.countryCode,
+    language: created.language,
+    placeType: created.placeType,
+    keywords: created.keywords,
+    maxRadius: created.maxRadius ?? MAXIMUM_RADIUS,
+    minRadius: created.minRadius ?? MINIMIUM_RADIUS,
   };
 }
