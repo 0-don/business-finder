@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { defineConfig, ViteDevServer } from "vite";
 import { db } from "./src/db/index.js";
 import { gridCellSchema } from "./src/db/schema.js";
-import { getCountryGeometry } from "./src/lib/hex-grid-generator.js";
+
+import { GridRepository } from "./src/lib/grid-repositroy.js";
 import { getActiveSettings } from "./src/lib/settings.js";
 
 export function injectGridData() {
@@ -70,10 +71,13 @@ export function injectGridData() {
     },
     transformIndexHtml: async (html: string) => {
       const settings = await getActiveSettings();
-      const geometry = await getCountryGeometry(settings);
+      const repo = new GridRepository(settings);
 
       return html
-        .replace("`{{GEOMETRY}}`", JSON.stringify(geometry))
+        .replace(
+          "`{{GEOMETRY}}`",
+          JSON.stringify(await repo.getCountryGeometry())
+        )
         .replace(
           "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
           process.env.GOOGLE_MAPS_JAVASCRIPT_API

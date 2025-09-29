@@ -12,7 +12,7 @@ export class GridGenerator {
   private newCount = 0;
 
   constructor(private settings: SettingsConfig) {
-    this.repo = new GridRepository(settings.id);
+    this.repo = new GridRepository(settings);
   }
 
   async generate(): Promise<number> {

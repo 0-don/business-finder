@@ -2,19 +2,19 @@ import { sql } from "drizzle-orm";
 import { getPlaceDetails, getPlacesNearby } from "../client";
 import { db } from "../db";
 import { businessSchema } from "../db/schema";
-import { SettingsConfig } from "../types";
 import {
   MAX_PAGES_PER_CELL,
   MAX_RESULTS_PER_CELL,
   RESULTS_PER_PAGE,
 } from "../lib/constants";
 import { GridRepository } from "../lib/grid-repositroy";
+import { SettingsConfig } from "../types";
 
 export class CellProcessor {
   private repo: GridRepository;
 
   constructor(private settings: SettingsConfig) {
-    this.repo = new GridRepository(settings.id);
+    this.repo = new GridRepository(settings);
   }
 
   async processNext(): Promise<{ needsSplit: boolean; cellId: number } | null> {

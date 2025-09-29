@@ -1,10 +1,10 @@
 import { and, eq, not, sql } from "drizzle-orm";
 import { db } from "../db";
 import { businessSchema, countries, gridCellSchema } from "../db/schema";
-import { Bounds, CountryCode, Point } from "../types";
+import { Bounds, CountryCode, Point, SettingsConfig } from "../types";
 
 export class GridRepository {
-  constructor(private settingsId: number) {}
+  constructor(private settings: SettingsConfig) {}
 
   async getBounds(countryCode: CountryCode): Promise<Bounds> {
     const [result] = await db
@@ -37,7 +37,7 @@ export class GridRepository {
       WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
       AND NOT EXISTS (
         SELECT 1 FROM grid_cell gc
-        WHERE gc.settings_id = ${this.settingsId}
+        WHERE gc.settings_id = ${this.settings.id}
         AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
       )
     `)) as unknown as Point[];
@@ -54,7 +54,7 @@ export class GridRepository {
         radiusMeters: c.radius,
         circle: sql`ST_Buffer(ST_Point(${c.center.lng}, ${c.center.lat}, 4326)::geography, ${c.radius})::geometry`,
         level,
-        settingsId: this.settingsId,
+        settingsId: this.settings.id,
       }))
     );
   }
@@ -107,7 +107,7 @@ export class GridRepository {
       .from(gridCellSchema)
       .where(
         and(
-          eq(gridCellSchema.settingsId, this.settingsId),
+          eq(gridCellSchema.settingsId, this.settings.id),
           eq(gridCellSchema.isProcessed, false)
         )
       )
@@ -152,7 +152,7 @@ export class GridRepository {
     const [result] = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(gridCellSchema)
-      .where(eq(gridCellSchema.settingsId, this.settingsId));
+      .where(eq(gridCellSchema.settingsId, this.settings.id));
     return result?.count || 0;
   }
 
@@ -160,8 +160,20 @@ export class GridRepository {
     const [result] = await db
       .select({ min: sql<number>`MIN(${gridCellSchema.radiusMeters})` })
       .from(gridCellSchema)
-      .where(eq(gridCellSchema.settingsId, this.settingsId))
+      .where(eq(gridCellSchema.settingsId, this.settings.id))
       .limit(1);
     return result?.min || null;
+  }
+
+  async getCountryGeometry(): Promise<any> {
+    const [result] = await db
+      .select({
+        geometry: sql<string>`ST_AsGeoJSON(${countries.geometry})::json`,
+      })
+      .from(countries)
+      .where(eq(countries.isoA3, this.settings.countryCode))
+      .limit(1);
+
+    return result?.geometry ? JSON.parse(result.geometry) : null;
   }
 }
