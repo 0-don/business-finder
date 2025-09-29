@@ -165,7 +165,7 @@ export class GridRepository {
     return result?.min || null;
   }
 
-  async getCountryGeometry(): Promise<any> {
+  async getCountryGeometry() {
     const [result] = await db
       .select({
         geometry: sql<string>`ST_AsGeoJSON(${countries.geometry})::json`,
