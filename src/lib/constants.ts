@@ -9,9 +9,9 @@ export const GPKG_PATH = "./gadm_410.gpkg";
 export const DOWNLOAD_URL =
   "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
 
-export const MAX_PAGES_PER_CELL = 4;
+export const MAX_PAGES_PER_CELL = 3;
 export const RESULTS_PER_PAGE = 20;
-export const MAX_RESULTS_PER_CELL = 80;
+export const MAX_RESULTS_PER_CELL = 60;
 
 export const MINIMIUM_RADIUS = 100; // in meters
 export const MAXIMUM_RADIUS = 50000; // in meters
