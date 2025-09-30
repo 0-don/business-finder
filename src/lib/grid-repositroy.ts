@@ -165,16 +165,15 @@ export class GridRepository {
   }
 
   async getBusinessCount(cellId: number): Promise<number> {
-    const [cell] = await db
-      .select({ circle: gridCellSchema.circle })
-      .from(gridCellSchema)
-      .where(eq(gridCellSchema.id, cellId))
-      .limit(1);
-    if (!cell) return 0;
     const [result] = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(businessSchema)
-      .where(sql`ST_Within(${businessSchema.location}, ${cell.circle})`);
+      .where(
+        sql`ST_Within(
+        ${businessSchema.location}, 
+        (SELECT circle FROM grid_cell WHERE id = ${cellId})
+      )`
+      );
     return result?.count || 0;
   }
 
