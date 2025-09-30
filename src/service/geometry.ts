@@ -76,9 +76,9 @@ export class Geometry {
 
       // Adaptive shrink rate: fine-grained above 1000m, aggressive below
       if (radius > 1000) {
-        radius *= 1; // 0.1% reduction per iteration (fine-grained)
+        radius *= 0.999; // 0.1% reduction per iteration (fine-grained)
       } else {
-        radius *= 1; // 1% reduction per iteration (aggressive)
+        radius *= 0.96; // 1% reduction per iteration (aggressive)
       }
     }
     return candidates.sort((a, b) => b.radius - a.radius);

@@ -6,11 +6,15 @@ import { GridGenerator } from "./service/grid-generator";
 
 const settings = await getActiveSettings();
 await extractGADMData(settings);
-console.log(settings);
+
 const processor = new CellProcessor(settings);
 const generator = new GridGenerator(settings);
 
 await generator.split(1);
+await generator.split(2);
+await generator.split(3);
+await generator.split(4);
+await generator.split(5);
 
 // while (true) {
 //   const result = await processor.processNext();
