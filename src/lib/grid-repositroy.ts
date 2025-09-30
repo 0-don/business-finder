@@ -107,7 +107,6 @@ export class GridRepository {
   }
 
   async getObstacles(center: Point, searchRadius: number, excludeId?: number) {
-    const bounds = sql`ST_Expand(ST_SetSRID(ST_Point(${center.lng}, ${center.lat}), 4326)::geometry, ${searchRadius / 111320})`;
     return db
       .select({
         center: {
@@ -121,9 +120,17 @@ export class GridRepository {
         excludeId
           ? and(
               not(eq(gridCellSchema.id, excludeId)),
-              sql`${gridCellSchema.center} && ${bounds}`
+              sql`ST_DWithin(
+              ${gridCellSchema.center}::geography,
+              ST_Point(${center.lng}, ${center.lat}, 4326)::geography,
+              ${searchRadius}
+            )`
             )
-          : sql`${gridCellSchema.center} && ${bounds}`
+          : sql`ST_DWithin(
+            ${gridCellSchema.center}::geography,
+            ST_Point(${center.lng}, ${center.lat}, 4326)::geography,
+            ${searchRadius}
+          )`
       );
   }
 
