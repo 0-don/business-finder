@@ -28,10 +28,12 @@ export class GridRepository {
     countryCode: CountryCode
   ): Promise<Point[]> {
     if (!points.length) return [];
-    const valuesSql = points.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
 
-    return (await db.execute(sql`
-      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
+    const values = points.map((p) => sql`(${p.lng}, ${p.lat})`);
+    const valuesSql = sql.join(values, sql`, `);
+
+    const results = await db.execute(sql`
+      WITH candidates (lng, lat) AS (VALUES ${valuesSql})
       SELECT c.lng, c.lat FROM candidates c
       JOIN countries co ON co."isoA3" = ${countryCode}
       WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
@@ -40,7 +42,12 @@ export class GridRepository {
         WHERE gc.settings_id = ${this.settings.id}
         AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
       )
-    `)) as unknown as Point[];
+    `);
+
+    return results.map((row) => ({
+      lng: row.lng as number,
+      lat: row.lat as number,
+    }));
   }
 
   async insertCells(

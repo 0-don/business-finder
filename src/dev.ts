@@ -10,12 +10,12 @@ await extractGADMData(settings);
 const processor = new CellProcessor(settings);
 const generator = new GridGenerator(settings);
 
-await generator.split(1);
+// await generator.split(1);
 
-// while (true) {
-//   const result = await processor.processNext();
-//   if (!result) break;
-//   if (result.needsSplit) await generator.split(result.cellId);
-// }
+while (true) {
+  const result = await processor.processNext();
+  if (!result) break;
+  if (result.needsSplit) await generator.split(result.cellId);
+}
 
 console.log("Processing complete!");
