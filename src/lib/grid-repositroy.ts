@@ -84,18 +84,25 @@ export class GridRepository {
         lng: sql<number>`ST_X(${gridCellSchema.center})`,
         radius: gridCellSchema.radiusMeters,
         level: gridCellSchema.level,
+        isProcessed: gridCellSchema.isProcessed,
+        businessCount: sql<number>`(
+        SELECT COUNT(*)::int 
+        FROM business 
+        WHERE ST_Within(location, ${gridCellSchema.circle})
+        AND settings_id = ${this.settings.id}
+      )`,
       })
       .from(gridCellSchema)
       .where(
         sql`
-                ST_Intersects(
-                  ${gridCellSchema.center},
-                  ST_MakeEnvelope(${viewport.west}, ${viewport.south}, 
-                                ${viewport.east}, ${viewport.north}, 4326)
-                )
-                AND ${gridCellSchema.radiusMeters} >= ${minRadius}
-                AND ${gridCellSchema.settingsId} = ${this.settings.id}
-              `
+        ST_Intersects(
+          ${gridCellSchema.center},
+          ST_MakeEnvelope(${viewport.west}, ${viewport.south}, 
+                        ${viewport.east}, ${viewport.north}, 4326)
+        )
+        AND ${gridCellSchema.radiusMeters} >= ${minRadius}
+        AND ${gridCellSchema.settingsId} = ${this.settings.id}
+      `
       );
   }
 

@@ -31,6 +31,34 @@
         <span class="text-gray-600 font-medium">Location:</span>
         <span class="text-gray-800" id="cell-location">-</span>
       </div>
+      <div class="flex justify-between mb-1 text-xs">
+        <span class="text-gray-600 font-medium">Status:</span>
+        <span class="text-gray-800" id="cell-status">-</span>
+      </div>
+      <div class="flex justify-between mb-1 text-xs">
+        <span class="text-gray-600 font-medium">Businesses:</span>
+        <span class="text-gray-800" id="cell-count">-</span>
+      </div>
+    </div>
+    <div
+      id="color-legend"
+      class="absolute bottom-4 right-2 bg-white/95 p-3 rounded-lg shadow-lg font-sans text-xs border border-gray-200"
+    >
+      <h4 class="text-sm font-bold text-gray-800 mb-2">Status</h4>
+      <div class="flex items-center gap-2 mb-1">
+        <div
+          class="w-4 h-4 rounded-full border-2"
+          style="border-color: #00d4ff"
+        ></div>
+        <span>Processed</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div
+          class="w-4 h-4 rounded-full border-2"
+          style="border-color: #ff0040"
+        ></div>
+        <span>Pending</span>
+      </div>
     </div>
     <script>
       let map;
@@ -82,6 +110,10 @@
           `${cellData.radius.toLocaleString()} m`;
         document.getElementById("cell-location").textContent =
           `${cellData.lat.toFixed(4)}, ${cellData.lng.toFixed(4)}`;
+        document.getElementById("cell-status").textContent =
+          cellData.isProcessed ? "✓ Processed" : "⏳ Pending";
+        document.getElementById("cell-count").textContent =
+          cellData.businessCount?.toLocaleString() || "0";
         legend.classList.remove("hidden");
       }
 
@@ -101,7 +133,6 @@
         const mouseLatLng = event.latLng;
         let foundCell = null;
 
-        // Check if mouse is over any circle
         for (const cellData of gridCellsData) {
           if (
             isPointInCircle(
@@ -145,21 +176,23 @@
           if (!response.ok) throw new Error("Failed to fetch grid cells");
 
           const gridData = await response.json();
-          gridCellsData = gridData; // Store for mouse hover detection
+          gridCellsData = gridData;
 
           currentCircles.forEach((circle) => circle.setMap(null));
           currentCircles = [];
 
           gridData.forEach((cell) => {
+            const strokeColor = cell.isProcessed ? "#00d4ff" : "#ff0040";
+
             const circle = new google.maps.Circle({
-              strokeColor: "#ff0040",
+              strokeColor: strokeColor,
               strokeOpacity: 1,
               strokeWeight: 2,
               fillOpacity: 0,
               map: map,
               center: { lat: cell.lat, lng: cell.lng },
               radius: cell.radius,
-              clickable: false, // Make circles non-clickable so map clicks work
+              clickable: false,
             });
 
             currentCircles.push(circle);
