@@ -9,84 +9,78 @@ export class Geometry {
   }
 
   static toDegrees(meters: number, lat = 0) {
-    const point = turf.point([0, lat]);
-    const latPoint = turf.destination(point, meters / 1000, 0, {
-      units: "kilometers",
-    });
-    const lngPoint = turf.destination(point, meters / 1000, 90, {
-      units: "kilometers",
-    });
-
     return {
-      lat: Math.abs(latPoint.geometry.coordinates[1]! - lat),
-      lng: Math.abs(lngPoint.geometry.coordinates[0]!),
+      lat: (meters * 360) / 40008000,
+      lng: (meters * 360) / (40075000 * Math.cos((lat * Math.PI) / 180)),
     };
   }
 
   static generateHexGrid(bounds: Bounds, radius: number): Point[] {
-    const bbox: [number, number, number, number] = [
-      bounds.minX,
-      bounds.minY,
-      bounds.maxX,
-      bounds.maxY,
-    ];
-    const cellSide = (radius * 2) / 1000;
-    const hexGrid = turf.hexGrid(bbox, cellSide, { units: "kilometers" });
+    const candidates: Point[] = [];
+    const dyDeg = this.toDegrees(radius * 1.5).lat;
+    let y = bounds.minY,
+      row = 0;
 
-    return hexGrid.features
-      .map((feature) => {
-        const center = turf.centroid(feature);
-        const lng = center.geometry.coordinates[0];
-        const lat = center.geometry.coordinates[1];
-        if (lng === undefined || lat === undefined) return null;
-        return { lng, lat };
-      })
-      .filter((p): p is Point => p !== null);
+    while (y <= bounds.maxY) {
+      const { lng: dxDeg } = this.toDegrees(radius * 1.73, y);
+      const { lng: offsetDeg } = this.toDegrees(radius * 0.866, y);
+      let x = bounds.minX + (row % 2 ? offsetDeg : 0);
+
+      while (x <= bounds.maxX) {
+        candidates.push({ lng: x, lat: y });
+        x += dxDeg;
+      }
+      y += dyDeg;
+      row++;
+    }
+    return candidates;
   }
 
   static generatePackCandidates(
     parent: Point,
     parentRadius: number,
     minRadius: number
-  ): Circle[] {
+  ) {
     const candidates: Circle[] = [];
-    const center = turf.point([parent.lng, parent.lat]);
     let radius = parentRadius / 2.5;
 
     while (radius >= minRadius) {
-      const parentCircle = turf.circle(center, parentRadius / 1000, {
-        units: "kilometers",
-        steps: 64,
-      });
+      const latRad = parentRadius / 111320;
+      const lngRad =
+        parentRadius / (111320 * Math.cos((parent.lat * Math.PI) / 180));
+      const latStep = (radius * 1.5) / 111320;
+      let row = 0;
 
-      const bbox = turf.bbox(parentCircle);
-      const bbox4: [number, number, number, number] = [
-        bbox[0],
-        bbox[1],
-        bbox[2],
-        bbox[3],
-      ];
-      const cellSide = (radius * 1.732) / 1000;
-      const hexGrid = turf.hexGrid(bbox4, cellSide, { units: "kilometers" });
+      for (
+        let lat = parent.lat - latRad;
+        lat <= parent.lat + latRad;
+        lat += latStep
+      ) {
+        const lngStep =
+          (radius * 1.732) / (111320 * Math.cos((lat * Math.PI) / 180));
+        const offset =
+          (radius * 0.866) / (111320 * Math.cos((lat * Math.PI) / 180));
 
-      for (const hex of hexGrid.features) {
-        const hexCenter = turf.centroid(hex);
-        const lng = hexCenter.geometry.coordinates[0];
-        const lat = hexCenter.geometry.coordinates[1];
-
-        if (lng === undefined || lat === undefined) continue;
-
-        const candidatePoint: Point = { lng, lat };
-        const distToParent = this.distance(candidatePoint, parent);
-
-        if (distToParent + radius <= parentRadius) {
-          candidates.push({ center: candidatePoint, radius });
+        for (
+          let lng = parent.lng - lngRad + (row % 2 ? offset : 0);
+          lng <= parent.lng + lngRad;
+          lng += lngStep
+        ) {
+          const center = { lng, lat };
+          if (this.distance(center, parent) + radius <= parentRadius) {
+            candidates.push({ center, radius });
+          }
         }
+        row++;
       }
 
-      radius *= 0.85;
+      // Adaptive shrink rate: fine-grained above 1000m, aggressive below
+      if (radius > 1000) {
+        radius *= 1; // 0.1% reduction per iteration (fine-grained)
+      } else {
+        radius *= 1; // 1% reduction per iteration (aggressive)
+      }
     }
-
     return candidates.sort((a, b) => b.radius - a.radius);
   }
 
@@ -95,84 +89,46 @@ export class Geometry {
     obstacles: Array<{ center: Point; radius: number }>
   ): Circle[] {
     const packed: Circle[] = [];
-
-    const obstacleCircles = obstacles.map((obs) => ({
-      circle: turf.circle([obs.center.lng, obs.center.lat], obs.radius / 1000, {
-        units: "kilometers",
-        steps: 32,
-      }),
-      ...obs,
-    }));
-
     const gridSize = 0.01;
-    const obstacleIndex = new Map<string, typeof obstacleCircles>();
 
-    for (const obs of obstacleCircles) {
-      const bbox = turf.bbox(obs.circle);
-      const bbox4: [number, number, number, number] = [
-        bbox[0],
-        bbox[1],
-        bbox[2],
-        bbox[3],
-      ];
-      const cells = this.getCellsForBBox(bbox4, gridSize);
+    // Build spatial index for obstacles with proper cell coverage
+    const obstacleIndex = new Map<string, typeof obstacles>();
+    for (const obs of obstacles) {
+      const cells = this.getCellsForCircle(obs.center, obs.radius, gridSize);
       for (const cell of cells) {
         if (!obstacleIndex.has(cell)) obstacleIndex.set(cell, []);
         obstacleIndex.get(cell)!.push(obs);
       }
     }
 
+    // Build spatial index for packed circles as we go
     const packedIndex = new Map<string, Circle[]>();
 
     for (const candidate of candidates) {
-      const candidateCircle = turf.circle(
-        [candidate.center.lng, candidate.center.lat],
-        candidate.radius / 1000,
-        { units: "kilometers", steps: 32 }
+      // Get all cells this candidate overlaps
+      const cells = this.getCellsForCircle(
+        candidate.center,
+        candidate.radius,
+        gridSize
       );
-      const bbox = turf.bbox(candidateCircle);
-      const bbox4: [number, number, number, number] = [
-        bbox[0],
-        bbox[1],
-        bbox[2],
-        bbox[3],
-      ];
-      const cells = this.getCellsForBBox(bbox4, gridSize);
 
-      const nearbyObstacles = new Set<(typeof obstacleCircles)[0]>();
-      const nearbyPacked = new Set<Circle>();
-
+      // Collect nearby obstacles and packed circles
+      const nearby = new Set<{ center: Point; radius: number }>();
       for (const cell of cells) {
-        obstacleIndex.get(cell)?.forEach((o) => nearbyObstacles.add(o));
-        packedIndex.get(cell)?.forEach((p) => nearbyPacked.add(p));
+        obstacleIndex.get(cell)?.forEach((o) => nearby.add(o));
+        packedIndex.get(cell)?.forEach((p) => nearby.add(p));
       }
 
-      let hasOverlap = false;
-
-      for (const obs of nearbyObstacles) {
-        if (
-          this.distance(candidate.center, obs.center) <
-          candidate.radius + obs.radius
-        ) {
-          hasOverlap = true;
-          break;
-        }
-      }
-
-      if (!hasOverlap) {
-        for (const packed of nearbyPacked) {
-          if (
-            this.distance(candidate.center, packed.center) <
-            candidate.radius + packed.radius
-          ) {
-            hasOverlap = true;
-            break;
-          }
-        }
-      }
+      // Check for overlaps
+      const hasOverlap = Array.from(nearby).some(
+        (other) =>
+          this.distance(candidate.center, other.center) <
+          candidate.radius + other.radius
+      );
 
       if (!hasOverlap) {
         packed.push(candidate);
+        // Add to spatial index
         for (const cell of cells) {
           if (!packedIndex.has(cell)) packedIndex.set(cell, []);
           packedIndex.get(cell)!.push(candidate);
@@ -183,20 +139,22 @@ export class Geometry {
     return packed;
   }
 
-  private static getCellsForBBox(
-    bbox: [number, number, number, number],
+  // Helper to get all grid cells a circle overlaps
+  private static getCellsForCircle(
+    center: Point,
+    radius: number,
     gridSize: number
   ): string[] {
-    const [minLng, minLat, maxLng, maxLat] = bbox;
     const cells: string[] = [];
+    const radiusDeg = (radius / 111320) * 1.5; // Add buffer for safety
 
-    const minLatCell = Math.floor(minLat / gridSize);
-    const maxLatCell = Math.ceil(maxLat / gridSize);
-    const minLngCell = Math.floor(minLng / gridSize);
-    const maxLngCell = Math.ceil(maxLng / gridSize);
+    const minLat = Math.floor((center.lat - radiusDeg) / gridSize);
+    const maxLat = Math.ceil((center.lat + radiusDeg) / gridSize);
+    const minLng = Math.floor((center.lng - radiusDeg) / gridSize);
+    const maxLng = Math.ceil((center.lng + radiusDeg) / gridSize);
 
-    for (let lat = minLatCell; lat <= maxLatCell; lat++) {
-      for (let lng = minLngCell; lng <= maxLngCell; lng++) {
+    for (let lat = minLat; lat <= maxLat; lat++) {
+      for (let lng = minLng; lng <= maxLng; lng++) {
         cells.push(`${lat},${lng}`);
       }
     }
