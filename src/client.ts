@@ -72,7 +72,9 @@ export async function getPlacesNearby(
         location: { lat, lng },
         radius,
         type: settings.placeType,
-        keyword: settings.keywords.join("|"),
+        keyword: settings.keywords.length
+          ? settings.keywords.join("|")
+          : undefined,
         language: settings.language as GoogleMapsLanguage,
         key: process.env.GOOGLE_PLACES_API,
         ...(nextPageToken && { pagetoken: nextPageToken }),
