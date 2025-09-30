@@ -19,6 +19,7 @@ Business Finder uses an intelligent hexagonal grid system to comprehensively sea
 ## Dump
 
 docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
+docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
 
 ## Restore
 
