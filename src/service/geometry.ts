@@ -18,8 +18,7 @@ export class Geometry {
   static generateHexGrid(bounds: Bounds, radius: number): Point[] {
     const candidates: Point[] = [];
     const dyDeg = this.toDegrees(radius * 1.5).lat;
-    let y = bounds.minY,
-      row = 0;
+    let y = bounds.minY, row = 0;
 
     while (y <= bounds.maxY) {
       const { lng: dxDeg } = this.toDegrees(radius * 1.73, y);
@@ -40,32 +39,21 @@ export class Geometry {
     parent: Point,
     parentRadius: number,
     minRadius: number
-  ) {
+  ): Circle[] {
     const candidates: Circle[] = [];
     let radius = parentRadius / 2.5;
 
     while (radius >= minRadius) {
       const latRad = parentRadius / 111320;
-      const lngRad =
-        parentRadius / (111320 * Math.cos((parent.lat * Math.PI) / 180));
+      const lngRad = parentRadius / (111320 * Math.cos((parent.lat * Math.PI) / 180));
       const latStep = (radius * 1.5) / 111320;
       let row = 0;
 
-      for (
-        let lat = parent.lat - latRad;
-        lat <= parent.lat + latRad;
-        lat += latStep
-      ) {
-        const lngStep =
-          (radius * 1.732) / (111320 * Math.cos((lat * Math.PI) / 180));
-        const offset =
-          (radius * 0.866) / (111320 * Math.cos((lat * Math.PI) / 180));
+      for (let lat = parent.lat - latRad; lat <= parent.lat + latRad; lat += latStep) {
+        const lngStep = (radius * 1.732) / (111320 * Math.cos((lat * Math.PI) / 180));
+        const offset = (radius * 0.866) / (111320 * Math.cos((lat * Math.PI) / 180));
 
-        for (
-          let lng = parent.lng - lngRad + (row % 2 ? offset : 0);
-          lng <= parent.lng + lngRad;
-          lng += lngStep
-        ) {
+        for (let lng = parent.lng - lngRad + (row % 2 ? offset : 0); lng <= parent.lng + lngRad; lng += lngStep) {
           const center = { lng, lat };
           if (this.distance(center, parent) + radius <= parentRadius) {
             candidates.push({ center, radius });
@@ -74,12 +62,7 @@ export class Geometry {
         row++;
       }
 
-      // Adaptive shrink rate: fine-grained above 1000m, aggressive below
-      if (radius > 1000) {
-        radius *= 0.999; // 0.1% reduction per iteration (fine-grained)
-      } else {
-        radius *= 0.98; // 1% reduction per iteration (aggressive)
-      }
+      radius = radius > 1000 ? radius * 0.999 : radius * 0.98;
     }
     return candidates.sort((a, b) => b.radius - a.radius);
   }
@@ -91,7 +74,6 @@ export class Geometry {
     const packed: Circle[] = [];
     const gridSize = 0.01;
 
-    // Build spatial index for obstacles with proper cell coverage
     const obstacleIndex = new Map<string, typeof obstacles>();
     for (const obs of obstacles) {
       const cells = this.getCellsForCircle(obs.center, obs.radius, gridSize);
@@ -101,34 +83,23 @@ export class Geometry {
       }
     }
 
-    // Build spatial index for packed circles as we go
     const packedIndex = new Map<string, Circle[]>();
 
     for (const candidate of candidates) {
-      // Get all cells this candidate overlaps
-      const cells = this.getCellsForCircle(
-        candidate.center,
-        candidate.radius,
-        gridSize
-      );
-
-      // Collect nearby obstacles and packed circles
+      const cells = this.getCellsForCircle(candidate.center, candidate.radius, gridSize);
       const nearby = new Set<{ center: Point; radius: number }>();
+      
       for (const cell of cells) {
         obstacleIndex.get(cell)?.forEach((o) => nearby.add(o));
         packedIndex.get(cell)?.forEach((p) => nearby.add(p));
       }
 
-      // Check for overlaps
       const hasOverlap = Array.from(nearby).some(
-        (other) =>
-          this.distance(candidate.center, other.center) <
-          candidate.radius + other.radius
+        (other) => this.distance(candidate.center, other.center) < candidate.radius + other.radius
       );
 
       if (!hasOverlap) {
         packed.push(candidate);
-        // Add to spatial index
         for (const cell of cells) {
           if (!packedIndex.has(cell)) packedIndex.set(cell, []);
           packedIndex.get(cell)!.push(candidate);
@@ -139,14 +110,9 @@ export class Geometry {
     return packed;
   }
 
-  // Helper to get all grid cells a circle overlaps
-  private static getCellsForCircle(
-    center: Point,
-    radius: number,
-    gridSize: number
-  ): string[] {
+  private static getCellsForCircle(center: Point, radius: number, gridSize: number): string[] {
     const cells: string[] = [];
-    const radiusDeg = (radius / 111320) * 1.5; // Add buffer for safety
+    const radiusDeg = (radius / 111320) * 1.5;
 
     const minLat = Math.floor((center.lat - radiusDeg) / gridSize);
     const maxLat = Math.ceil((center.lat + radiusDeg) / gridSize);
