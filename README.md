@@ -24,5 +24,5 @@ docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_ce
 ## Restore
 
 docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql
-
+docker exec -i business-finder-db psql -U postgres -d business-finder < grid_cell_inserts.sql
 docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql && clear && bun dev
