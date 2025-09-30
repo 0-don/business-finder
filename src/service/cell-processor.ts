@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getPlaceDetails, getPlacesNearby } from "../client";
 import { db } from "../db";
 import { businessSchema } from "../db/schema";
@@ -54,6 +54,14 @@ export class CellProcessor {
 
         for (const place of res.data.results) {
           if (place.place_id && place.name && place.geometry?.location) {
+            const [existing] = await db
+              .select({ placeId: businessSchema.placeId })
+              .from(businessSchema)
+              .where(eq(businessSchema.placeId, place.place_id))
+              .limit(1);
+
+            if (existing) continue;
+
             const details = await getPlaceDetails(place.place_id);
             await db
               .insert(businessSchema)
