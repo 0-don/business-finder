@@ -24,8 +24,13 @@ jobs:
           echo GOOGLE_PLACES_API=${{ secrets.GOOGLE_PLACES_API }} >> .env
           echo GOOGLE_MAPS_JAVASCRIPT_API=${{ secrets.GOOGLE_MAPS_JAVASCRIPT_API }} >> .env
 
-      # - name: Reset DB
-      #   run: docker stop business-finder-db || true && docker rm business-finder-db || true
+          echo DEFAULT_COUNTRY_CODE="DEU" >> .env
+          echo DEFAULT_LANGUAGE="de" >> .env
+          echo DEFAULT_PLACE_TYPE="accounting" >> .env
+          echo DEFAULT_KEYWORDS="" >> .env
+
+      - name: Reset DB
+        run: docker stop business-finder-db || true && docker rm business-finder-db || true
 
       - name: Docker run
         run: docker compose up -d --force-recreate --build

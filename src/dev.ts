@@ -6,7 +6,7 @@ import { GridGenerator } from "./service/grid-generator";
 
 const settings = await getActiveSettings();
 await extractGADMData(settings);
-
+console.log(settings);
 const processor = new CellProcessor(settings);
 const generator = new GridGenerator(settings);
 
@@ -14,6 +14,7 @@ const generator = new GridGenerator(settings);
 
 while (true) {
   const result = await processor.processNext();
+  console.log(result);
   if (!result) break;
   if (result.needsSplit) await generator.split(result.cellId);
 }

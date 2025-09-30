@@ -90,7 +90,9 @@ export class CellProcessor {
         token = res.data.next_page_token || null;
         page++;
         await this.repo.updateProgress(cellId, page, token);
-        if (!token || res.data.results.length < RESULTS_PER_PAGE) break;
+        if (!token || res.data.results.length < RESULTS_PER_PAGE) {
+          break;
+        }
       }
     } catch (err) {
       console.error(`Error searching cell ${cellId}:`, err);
