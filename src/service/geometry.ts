@@ -78,7 +78,7 @@ export class Geometry {
       if (radius > 1000) {
         radius *= 0.999; // 0.1% reduction per iteration (fine-grained)
       } else {
-        radius *= 0.96; // 1% reduction per iteration (aggressive)
+        radius *= 0.98; // 1% reduction per iteration (aggressive)
       }
     }
     return candidates.sort((a, b) => b.radius - a.radius);

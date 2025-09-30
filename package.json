@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "NODE_OPTIONS='--max-old-space-size=16192' tsx src/index.ts",
     "dev": "NODE_OPTIONS='--max-old-space-size=16192' tsx watch src/dev.ts",
     "view": "vite",
     "drizzle": "npm run reset && drizzle-kit generate",
