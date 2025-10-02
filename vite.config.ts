@@ -66,7 +66,7 @@ export default defineConfig({
   // plugins: [injectGridData()],
   server: {
     port: 3000,
-    host: process.env.DOCKER ? "0.0.0.0" : undefined,
-    allowedHosts: true,
+    // host: process.env.DOCKER ? "0.0.0.0" : undefined,
+    // allowedHosts: true,
   },
 });
