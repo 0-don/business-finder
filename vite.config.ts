@@ -1,7 +1,5 @@
 import "@dotenvx/dotenvx/config";
-
 import { defineConfig } from "vite";
-console.log("DATABASE_URL:", process.env.DATABASE_URL);
 
 // export function injectGridData() {
 //   return {
