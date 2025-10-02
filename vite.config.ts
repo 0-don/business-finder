@@ -1,5 +1,5 @@
 import "@dotenvx/dotenvx/config";
-import process from "process";
+
 import { defineConfig } from "vite";
 console.log("DATABASE_URL:", process.env.DATABASE_URL);
 
