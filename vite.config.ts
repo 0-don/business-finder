@@ -1,9 +1,9 @@
 import "@dotenvx/dotenvx/config";
+import process from "process";
 import { defineConfig, ViteDevServer } from "vite";
 import { GridRepository } from "./src/lib/grid-repositroy.js";
 import { getActiveSettings } from "./src/lib/settings.js";
-import process from "process";
-
+console.log("DATABASE_URL:", process.env.DATABASE_URL);
 export function injectGridData() {
   return {
     name: "inject-grid-data",
