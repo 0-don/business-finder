@@ -6,7 +6,7 @@
   "scripts": {
     "start": "NODE_OPTIONS='--max-old-space-size=16192' tsx src/index.ts",
     "dev": "NODE_OPTIONS='--max-old-space-size=16192' tsx watch src/dev.ts",
-    "view": "vite",
+   "serve": "NODE_OPTIONS='--max-old-space-size=16192' tsx src/server.ts",
     "drizzle": "npm run reset && drizzle-kit generate",
     "reset": "tsx ./drizzle/reset-db.ts"
   },
@@ -29,8 +29,7 @@
     "drizzle-kit": "0.31.5",
     "postgres": "3.4.7",
     "prettier": "3.6.2",
-    "tsx": "4.20.6",
-    "vite": "7.1.8"
+    "tsx": "4.20.6"
   },
   "peerDependencies": {
     "typescript": "5.9.3"
