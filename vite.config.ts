@@ -1,9 +1,10 @@
 import "@dotenvx/dotenvx/config";
 import { defineConfig, ViteDevServer } from "vite";
+import { SettingsConfig } from "./src/types/index.js";
 
 export function injectGridData() {
-  let settingsCache: any = null;
-  let geometryCache: any = null;
+  let settingsCache: SettingsConfig | null = null;
+  let geometryCache: string | undefined = undefined;
 
   async function ensureData() {
     if (!settingsCache) {
