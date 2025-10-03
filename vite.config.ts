@@ -1,14 +1,33 @@
 import "@dotenvx/dotenvx/config";
 import { defineConfig, ViteDevServer } from "vite";
-import { GridRepository } from "./src/lib/grid-repositroy.js";
-import { getActiveSettings } from "./src/lib/settings.js";
 
 export function injectGridData() {
+  let settingsCache: any = null;
+  let geometryCache: any = null;
+
+  async function ensureData() {
+    if (!settingsCache) {
+      const { getActiveSettings } = await import("./src/lib/settings.js");
+      const { GridRepository } = await import("./src/lib/grid-repositroy.js");
+
+      settingsCache = await getActiveSettings();
+      geometryCache = await new GridRepository(
+        settingsCache
+      ).getCountryGeometry();
+    }
+    return { settings: settingsCache, geometry: geometryCache };
+  }
+
   return {
     name: "inject-grid-data",
     configureServer(server: ViteDevServer) {
       server.middlewares.use("/api/grid-cells", async (req, res) => {
         try {
+          const { GridRepository } = await import(
+            "./src/lib/grid-repositroy.js"
+          );
+          const { settings } = await ensureData();
+
           const url = new URL(req.url!, `http://${req.headers.host}`);
           const bounds = {
             north: parseFloat(url.searchParams.get("north") || "0"),
@@ -28,7 +47,6 @@ export function injectGridData() {
           else if (zoom <= 10) minRadius = 500;
           else if (zoom <= 11) minRadius = 300;
 
-          const settings = await getActiveSettings();
           const cells = await new GridRepository(settings).getCells(
             {
               north: bounds.north + buffer,
@@ -49,13 +67,10 @@ export function injectGridData() {
       });
     },
     transformIndexHtml: {
-      order: "pre" as const,
+      order: "pre",
       async handler(html: string) {
         try {
-          const settings = await getActiveSettings();
-          const geometry = await new GridRepository(
-            settings
-          ).getCountryGeometry();
+          const { geometry } = await ensureData();
 
           return html
             .replace("`{{GEOMETRY}}`", JSON.stringify(geometry))
@@ -65,7 +80,12 @@ export function injectGridData() {
             );
         } catch (error) {
           console.error("Error transforming HTML:", error);
-          throw error;
+          return html
+            .replace("`{{GEOMETRY}}`", "null")
+            .replace(
+              "{{GOOGLE_MAPS_JAVASCRIPT_API}}",
+              process.env.GOOGLE_MAPS_JAVASCRIPT_API
+            );
         }
       },
     },
