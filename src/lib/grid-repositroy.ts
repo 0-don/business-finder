@@ -28,44 +28,19 @@ export class GridRepository {
     countryCode: CountryCode
   ): Promise<Point[]> {
     if (!points.length) return [];
+    const valuesSql = points.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
 
-    const results: Point[] = [];
-    const batchSize = 1000;
-
-    for (let i = 0; i < points.length; i += batchSize) {
-      const batch = points.slice(i, i + batchSize);
-
-      // Create proper array literals for PostgreSQL
-      const lngs = batch.map((p) => Number(p.lng.toFixed(12)));
-      const lats = batch.map((p) => Number(p.lat.toFixed(12)));
-
-      const batchResults = (await db.execute(sql`
-      WITH candidates AS (
-        SELECT 
-          unnest(ARRAY[${sql.raw(lngs.join(","))}]::float8[]) as lng,
-          unnest(ARRAY[${sql.raw(lats.join(","))}]::float8[]) as lat
-      )
-      SELECT c.lng::float8, c.lat::float8 FROM candidates c
+    return (await db.execute(sql`
+      WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
+      SELECT c.lng, c.lat FROM candidates c
       JOIN countries co ON co."isoA3" = ${countryCode}
-      WHERE ST_Within(
-        ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry,
-        co.geometry
-      )
+      WHERE ST_Within(ST_Buffer(ST_Point(c.lng, c.lat, 4326)::geography, ${radius})::geometry, co.geometry)
       AND NOT EXISTS (
         SELECT 1 FROM grid_cell gc
         WHERE gc.settings_id = ${this.settings.id}
-        AND ST_DWithin(
-          ST_Point(c.lng, c.lat, 4326)::geography,
-          gc.center::geography,
-          ${radius} + gc.radius_meters
-        )
+        AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
       )
-    `)) as { lng: number; lat: number }[];
-
-      results.push(...batchResults);
-    }
-
-    return results;
+    `)) as unknown as Point[];
   }
 
   async insertCells(
