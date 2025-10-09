@@ -1,3 +1,4 @@
+import { error } from "console";
 import { and, eq, not, sql } from "drizzle-orm";
 import { db } from "../db";
 import { businessSchema, countries, gridCellSchema } from "../db/schema";
@@ -28,9 +29,11 @@ export class GridRepository {
     countryCode: CountryCode
   ): Promise<Point[]> {
     if (!points.length) return [];
-    const valuesSql = points.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
 
-    return (await db.execute(sql`
+    try {
+      const valuesSql = points.map((p) => `(${p.lng}, ${p.lat})`).join(", ");
+
+      return (await db.execute(sql`
       WITH candidates (lng, lat) AS (VALUES ${sql.raw(valuesSql)})
       SELECT c.lng, c.lat FROM candidates c
       JOIN countries co ON co."isoA3" = ${countryCode}
@@ -41,6 +44,10 @@ export class GridRepository {
         AND ST_DWithin(ST_Point(c.lng, c.lat, 4326)::geography, gc.center::geography, ${radius} + gc.radius_meters)
       )
     `)) as unknown as Point[];
+    } catch (err) {
+      error("Error validating points:", err);
+      return [];
+    }
   }
 
   async insertCells(
