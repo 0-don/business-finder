@@ -47,58 +47,50 @@ services:
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
       - DEFAULT_KEYWORDS=${DEFAULT_KEYWORDS}
-  business-finder-db:
-    container_name: business-finder-db
-    image: postgis/postgis:latest
-    restart: always
-    networks:
-      - proxy
-    ports:
-      - 5437:5432
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    shm_size: 8g
-    deploy:
-      resources:
-        limits:
-          memory: 24g
-        reservations:
-          memory: 16g
-    command: |
-      postgres
-      -c max_connections=200
-      -c shared_buffers=8GB
-      -c effective_cache_size=24GB
-      -c work_mem=512MB
-      -c maintenance_work_mem=2GB
-      -c max_worker_processes=16
-      -c max_parallel_workers=16
-      -c max_parallel_workers_per_gather=8
-      -c max_parallel_maintenance_workers=8
-      -c parallel_setup_cost=10
-      -c parallel_tuple_cost=0.001
-      -c random_page_cost=0.5
-      -c seq_page_cost=0.5
-      -c effective_io_concurrency=1000
-      -c checkpoint_completion_target=0.95
-      -c wal_buffers=512MB
-      -c default_statistics_target=1000
-      -c temp_buffers=256MB
-      -c max_wal_size=8GB
-      -c min_wal_size=2GB
-      -c autovacuum_work_mem=2GB
-      -c autovacuum_max_workers=6
-      -c max_wal_senders=0
-      -c max_replication_slots=0
-      -c wal_level=replica
-      -c synchronous_commit=off
-      -c fsync=off
-      -c full_page_writes=off
-      -c huge_pages=try
-      -c temp_file_limit=10GB
-      -c log_min_duration_statement=10000
+business-finder-db:
+  container_name: business-finder-db
+  image: postgis/postgis:latest
+  restart: always
+  networks:
+    - proxy
+  ports:
+    - 5437:5432
+  environment:
+    - POSTGRES_DB=${POSTGRES_DB}
+    - POSTGRES_USER=${POSTGRES_USER}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  shm_size: 4g
+  deploy:
+    resources:
+      limits:
+        memory: 12g
+      reservations:
+        memory: 8g
+  command: |
+    postgres
+    -c max_connections=100
+    -c shared_buffers=4GB
+    -c effective_cache_size=10GB
+    -c work_mem=32MB
+    -c maintenance_work_mem=512MB
+    -c max_worker_processes=8
+    -c max_parallel_workers=6
+    -c max_parallel_workers_per_gather=2
+    -c max_parallel_maintenance_workers=2
+    -c random_page_cost=1.1
+    -c effective_io_concurrency=200
+    -c checkpoint_completion_target=0.9
+    -c wal_buffers=16MB
+    -c default_statistics_target=100
+    -c temp_buffers=32MB
+    -c max_wal_size=2GB
+    -c min_wal_size=1GB
+    -c autovacuum_work_mem=256MB
+    -c autovacuum_max_workers=3
+    -c synchronous_commit=on
+    -c fsync=on
+    -c full_page_writes=on
+    -c log_min_duration_statement=1000
 
 networks:
   proxy:
