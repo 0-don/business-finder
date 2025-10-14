@@ -47,18 +47,18 @@ services:
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
       - DEFAULT_KEYWORDS=${DEFAULT_KEYWORDS}
-business-finder-db:
-  container_name: business-finder-db
-  image: postgis/postgis:latest
-  restart: always
-  networks:
-    - proxy
-  ports:
-    - 5437:5432
-  environment:
-    - POSTGRES_DB=${POSTGRES_DB}
-    - POSTGRES_USER=${POSTGRES_USER}
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  business-finder-db:
+    container_name: business-finder-db
+    image: postgis/postgis:latest
+    restart: always
+    networks:
+      - proxy
+    ports:
+      - 5437:5432
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
 networks:
   proxy:
