@@ -15,14 +15,17 @@ Business Finder uses an intelligent hexagonal grid system to comprehensively sea
 - **Resumable**: Can pause and resume searches without losing progress
 - **Multi-country Support**: Works with any country using GADM boundary data
 
-
 ## Dump
 
 docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
 docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
+
+docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --format=custom > grid_cell.dump
 
 ## Restore
 
 docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql
 docker exec -i business-finder-db psql -U postgres -d business-finder < grid_cell_inserts.sql
 docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql && clear && bun dev
+
+docker exec -i postgres pg_restore -U postgres -d business-finder < grid_cell.dump
