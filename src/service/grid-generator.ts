@@ -113,12 +113,8 @@ export class GridGenerator {
   }
 
   private async findNextRadius(maxRadius: number): Promise<number | null> {
-    const step = Math.max(
-      25,
-      Math.floor((maxRadius - this.settings.minRadius) / 30)
-    );
-
-    for (let r = maxRadius; r >= this.settings.minRadius; r -= step) {
+    // 1m decrements
+    for (let r = maxRadius; r >= this.settings.minRadius; r -= 1) {
       const result = (await db.execute(sql`
       WITH test_point AS (
         SELECT ST_Centroid(geometry) as center
@@ -147,7 +143,7 @@ export class GridGenerator {
     }
     return null;
   }
-
+  
   async split(cellId: number): Promise<number> {
     const startTime = Date.now();
 
