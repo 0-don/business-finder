@@ -21,6 +21,7 @@ docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-
 docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
 
 docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --format=custom > grid_cell.dump
+docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-only --format=custom > grid_cell.dump
 
 ## Restore
 
