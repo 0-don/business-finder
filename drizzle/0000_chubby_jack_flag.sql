@@ -69,7 +69,7 @@ CREATE TABLE "settings" (
 	"place_type" "place_type" NOT NULL,
 	"keywords" text[] NOT NULL,
 	"max_radius" double precision DEFAULT 50000,
-	"min_radius" double precision DEFAULT 100,
+	"min_radius" double precision DEFAULT 10,
 	"is_active" boolean DEFAULT true,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now()

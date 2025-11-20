@@ -21,45 +21,38 @@ export async function createPostgreIndexes() {
     `),
   ]);
 
-  await Promise.all([
-    // Countries spatial index
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
-      ON countries USING GIST (geometry);
-    `),
+  // Create indexes sequentially to avoid deadlocks
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_countries_geometry_gist 
+    ON countries USING GIST (geometry);
+  `);
 
-    // Business location index (removed country_code from GIST index)
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_location_gist 
-      ON business USING GIST (location);
-    `),
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_location_gist 
+    ON business USING GIST (location);
+  `);
 
-    // Grid cell spatial indexes (removed country_code from GIST index)
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_circle_gist 
-      ON grid_cell USING GIST (circle);
-    `),
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_circle_gist 
+    ON grid_cell USING GIST (circle);
+  `);
 
-    // GADM subdivisions spatial index
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_geometry_gist 
-      ON gadm_subdivisions USING GIST (geometry);
-    `),
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gadm_geometry_gist 
+    ON gadm_subdivisions USING GIST (geometry);
+  `);
 
-    // Add covering index for common spatial queries
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_spatial_covering
-      ON grid_cell USING GIST (center, circle)
-      WHERE is_processed = false;
-    `),
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_cell_spatial_covering
+    ON grid_cell USING GIST (center, circle)
+    WHERE is_processed = false;
+  `);
 
-    // Add partial index for unprocessed cells
-    db.execute(sql`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed
-      ON grid_cell (settings_id, level, id)
-      WHERE is_processed = false;
-    `),
-  ]);
+  await db.execute(sql`
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_grid_unprocessed
+    ON grid_cell (settings_id, level, id)
+    WHERE is_processed = false;
+  `);
 }
 
 if (!process.env.DOCKER) {
