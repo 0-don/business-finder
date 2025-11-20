@@ -84,23 +84,28 @@ export class GridGenerator {
     maxRadius: number,
     bounds: Bounds
   ): Promise<number | null> {
-    const step = Math.max(
-      25,
-      Math.floor((maxRadius - this.settings.minRadius) / 30)
-    );
-    for (let r = maxRadius; r >= this.settings.minRadius; r -= step) {
+    const totalRange = maxRadius - this.settings.minRadius;
+
+    for (let r = maxRadius - 1; r >= this.settings.minRadius; r--) {
+      const tested = maxRadius - r;
+      const progress = ((tested / totalRange) * 100).toFixed(1);
+
+      process.stdout.write(
+        `\r  Testing ${r}m (${progress}% - ${tested}/${totalRange})`
+      );
+
       const candidates = Geometry.generateHexGrid(bounds, r);
-      if (
-        (
-          await this.repo.validatePoints(
-            candidates,
-            r,
-            this.settings.countryCode
-          )
-        ).length > 0
-      )
+      const validCandidates = await this.repo.validatePoints(
+        candidates,
+        r,
+        this.settings.countryCode
+      );
+
+      if (validCandidates.length > 0) {
         return r;
+      }
     }
+
     return null;
   }
 }
