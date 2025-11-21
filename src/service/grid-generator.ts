@@ -90,9 +90,13 @@ export class GridGenerator {
       const tested = maxRadius - r;
       const progress = ((tested / totalRange) * 100).toFixed(1);
 
-      process.stdout.write(
-        `\r  Testing ${r}m (${progress}% - ${tested}/${totalRange})`
-      );
+      if (process.env.DOCKER) {
+        console.log(`Testing ${r}m (${progress}% - ${tested}/${totalRange})`);
+      } else {
+        process.stdout.write(
+          `\r  Testing ${r}m (${progress}% - ${tested}/${totalRange})`
+        );
+      }
 
       const candidates = Geometry.generateHexGrid(bounds, r);
       const validCandidates = await this.repo.validatePoints(
