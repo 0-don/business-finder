@@ -24,4 +24,6 @@ WORKDIR /app
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 
+ENV DOCKER=true
+
 CMD ["bun", "start"]
