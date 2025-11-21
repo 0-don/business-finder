@@ -30,3 +30,9 @@ docker exec -i business-finder-db psql -U postgres -d business-finder < grid_cel
 docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql && clear && bun dev
 
 docker exec -i postgres pg_restore -U postgres -d business-finder < grid_cell.dump
+
+# Install Chromium-Driver for Patchright
+
+npx patchright install chromium
+
+<!-- https://www.google.com/maps/search/steuerberater/@51.1657,10.4515,15z?hl=en -->

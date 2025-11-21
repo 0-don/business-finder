@@ -1,6 +1,6 @@
 import { Language as GoogleMapsLanguage } from "@googlemaps/google-maps-services-js";
-import { CLIENT } from "./lib/constants";
-import { getActiveSettings } from "./lib/settings";
+import { CLIENT } from "./constants";
+import { getActiveSettings } from "./settings";
 
 export async function exponentialBackoff<T>(
   fn: () => Promise<T>,

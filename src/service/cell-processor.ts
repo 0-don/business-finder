@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
-import { getPlaceDetails, getPlacesNearby } from "../client";
 import { db } from "../db";
 import { businessSchema } from "../db/schema";
+import { getPlaceDetails, getPlacesNearby } from "../lib/client";
 import {
   MAX_PAGES_PER_CELL,
   MAX_RESULTS_PER_CELL,

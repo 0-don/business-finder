@@ -7,6 +7,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/dev.ts",
     "serve": "tsx src/server.ts",
+    "scrape": "tsx watch src/scrape.ts",
     "drizzle": "npm run reset && drizzle-kit generate",
     "reset": "tsx ./drizzle/reset-db.ts"
   },
@@ -14,10 +15,11 @@
     "@googlemaps/google-maps-services-js": "3.4.2",
     "@ngageoint/geopackage": "4.2.6",
     "@turf/turf": "7.3.0",
-    "better-sqlite3": "12.4.1",
+    "better-sqlite3": "12.4.5",
     "cli-progress": "3.12.0",
     "dayjs": "1.11.19",
     "drizzle-orm": "0.44.7",
+    "puppeteer-real-browser": "1.4.4",
     "unzipper": "0.12.3"
   },
   "devDependencies": {
