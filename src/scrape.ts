@@ -1,4 +1,5 @@
 import { connect } from "puppeteer-real-browser";
+import { startConsentHandler } from "./lib/scrape/consent";
 
 const { page } = await connect({
   headless: false,
@@ -6,4 +7,8 @@ const { page } = await connect({
   disableXvfb: true,
 });
 
-await page.goto("https://disboard.org/");
+startConsentHandler(page);
+
+await page.goto(
+  "https://www.google.com/maps/search/steuerberater/@51.1657,10.4515,15z?hl=en"
+);
