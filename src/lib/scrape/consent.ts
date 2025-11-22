@@ -13,11 +13,11 @@ export function startConsentHandler(page: PageWithCursor) {
       try {
         const acceptButton = await page.$('button[aria-label="Accept all"]');
         if (acceptButton) {
+          // Scroll button into view first
+          await acceptButton.scrollIntoView();
+
           const isVisible = await acceptButton.isIntersectingViewport();
-          if (isVisible) {
-            await acceptButton.click();
-            console.log("Clicked Accept all button");
-          }
+          if (isVisible) await acceptButton.click();
         }
       } catch (err) {
         // Silently continue
