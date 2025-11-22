@@ -88,7 +88,7 @@ export class GridGenerator {
       const tested = maxRadius - r;
       const progress = ((tested / totalRange) * 100).toFixed(1);
 
-      if (process.env.DOCKER) {
+      if (!process.env.DOCKER) {
         console.log(`Testing ${r}m (${progress}% - ${tested}/${totalRange})`);
       } else {
         process.stdout.write(
