@@ -1,13 +1,20 @@
+import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import { Page } from "puppeteer";
 import { connect, PageWithCursor } from "puppeteer-real-browser";
+import { setupCleanup } from "./lib/scrape/cleanup";
 import { startConsentHandler } from "./lib/scrape/consent";
 
-const { page } = await connect({
+const { page, browser } = await connect({
   headless: false,
   turnstile: true,
   disableXvfb: true,
 });
 
+setupCleanup(browser, page);
 startConsentHandler(page);
+PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) =>
+  blocker.enableBlockingInPage(page as unknown as Page)
+);
 
 const url =
   "https://www.google.com/maps/search/steuerberater/@52.5200,13.4050,15z?hl=en";
@@ -15,7 +22,6 @@ const url =
 while (true) {
   try {
     await page.goto(url);
-    await page.waitForSelector('[role="article"]', { timeout: 10000 });
 
     if (await scrollToLoadAll(page)) {
       const count = await page.$$eval(
@@ -72,7 +78,7 @@ async function scrollToLoadAll(page: PageWithCursor): Promise<boolean> {
       document.querySelector('[role="feed"]')?.scrollTo(0, 999999);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 
   return false; // Infinite loading suspected

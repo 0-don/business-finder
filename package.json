@@ -12,6 +12,8 @@
     "reset": "tsx ./drizzle/reset-db.ts"
   },
   "dependencies": {
+    "@duckduckgo/autoconsent": "^14.37.3",
+    "@ghostery/adblocker-puppeteer": "2.12.5",
     "@googlemaps/google-maps-services-js": "3.4.2",
     "@ngageoint/geopackage": "4.2.6",
     "@turf/turf": "7.3.0",
