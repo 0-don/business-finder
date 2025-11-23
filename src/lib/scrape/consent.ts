@@ -4,9 +4,7 @@ export function startConsentHandler(page: PageWithCursor) {
   let isRunning = true;
 
   // Stop when page closes
-  page.on("close", () => {
-    isRunning = false;
-  });
+  page.on("close", () => (isRunning = false));
 
   async function checkConsent() {
     while (isRunning) {
