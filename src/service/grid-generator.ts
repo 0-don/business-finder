@@ -46,7 +46,7 @@ export class GridGenerator {
       );
 
       level++;
-      radius = (await this.findNextRadius(radius - 1, bounds)) ?? radius - 1;
+      radius = (await this.findNextRadius(radius, bounds)) ?? radius - 1;
     }
 
     return this.repo.getTotalCount();
