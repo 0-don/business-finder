@@ -55,15 +55,24 @@ export class GridRepository {
     level: number
   ): Promise<void> {
     if (!circles.length) return;
-    await db.insert(gridCellSchema).values(
-      circles.map((c) => ({
-        center: sql`ST_Point(${c.center.lng}, ${c.center.lat}, 4326)`,
-        radiusMeters: c.radius,
-        circle: sql`ST_Buffer(ST_Point(${c.center.lng}, ${c.center.lat}, 4326)::geography, ${c.radius})::geometry`,
-        level,
-        settingsId: this.settings.id,
-      }))
-    );
+
+    const BATCH_SIZE = 1000;
+
+    for (let i = 0; i < circles.length; i += BATCH_SIZE) {
+      const batch = circles.slice(i, i + BATCH_SIZE);
+
+      await db.insert(gridCellSchema).values(
+        batch.map((c) => ({
+          center: sql`ST_Point(${c.center.lng}, ${c.center.lat}, 4326)`,
+          radiusMeters: c.radius,
+          circle: sql`ST_Buffer(ST_Point(${c.center.lng}, ${c.center.lat}, 4326)::geography, ${c.radius})::geometry`,
+          level,
+          settingsId: this.settings.id,
+        }))
+      );
+
+      console.log(`Inserted ${i + batch.length}/${circles.length} records`);
+    }
   }
 
   async getCell(cellId: number) {

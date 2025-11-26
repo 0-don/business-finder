@@ -17,7 +17,7 @@ PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).then((b) =>
 );
 
 const url =
-  "https://www.google.com/maps/search/steuerberater/@52.5200,13.4050,15z?hl=en";
+  "https://www.google.com/maps/search/steuerberater/@50.5234,10.9876,14z?hl=en";
 
 while (true) {
   try {
@@ -30,10 +30,10 @@ while (true) {
           index === self.findIndex((b) => b.id === business.id)
       );
 
+      console.log(JSON.stringify(uniqueBusinesses, null, 2));
       console.log(
         `Extracted ${uniqueBusinesses.length} unique businesses (${businesses.length - uniqueBusinesses.length} duplicates removed)`
       );
-      console.log(JSON.stringify(uniqueBusinesses, null, 2));
       break;
     }
 
