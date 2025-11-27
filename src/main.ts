@@ -44,9 +44,6 @@ log("Starting grid scraping...");
 while (true) {
   const result = await SCRAPER.processNextCell();
   if (!result) break;
-
-  // Add delay between cells to avoid being blocked
-  await new Promise((resolve) => setTimeout(resolve, 2000));
 }
 
 await SCRAPER.destroy();

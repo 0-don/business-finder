@@ -6,6 +6,7 @@ import { Bounds, CountryCode, Point, SettingsConfig, Viewport } from "../types";
 
 export class GridRepository {
   constructor(private settings: SettingsConfig) {}
+
   async getExistingCellsCount(): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -143,7 +144,7 @@ export class GridRepository {
           eq(gridCellSchema.isProcessed, false)
         )
       )
-      .orderBy(gridCellSchema.level, gridCellSchema.id)
+      .orderBy(sql`RANDOM()`)
       .limit(1);
     return cell;
   }
