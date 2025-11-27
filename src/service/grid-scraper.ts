@@ -87,13 +87,13 @@ export class GridScraper {
     if (!cellData) return null;
 
     log(
-      `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} (L${cellData.level}) - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
+      `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
     );
 
     const businessCount = await this.scrapeCell(cellData);
     await this.repo.markProcessed(cell.id);
 
-    log(`Cell ${cell.id} complete: ${businessCount} businesses processed`);
+    log(`${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${businessCount} businesses processed`);
     return { cellId: cell.id, businessCount };
   }
 
