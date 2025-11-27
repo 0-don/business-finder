@@ -13,10 +13,10 @@ services:
       - ~/business-finder-stream/:/app/stream
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5437/${POSTGRES_DB}
-
       - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
       - DOCKER=true
+
   business-finder-vpn:
     container_name: business-finder-vpn
     restart: always
@@ -32,9 +32,11 @@ services:
       - OPENVPN_USER=${OPENVPN_USER}
       - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
       - OPENVPN_CIPHERS=AES-256-GCM
+      - SERVER_COUNTRIES=germany
       - LOG_LEVEL=debug
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
   business-finder-db:
     container_name: business-finder-db
     image: postgis/postgis:latest
