@@ -60,7 +60,7 @@ export class GridScraper {
       disableXvfb: process.env.DOCKER ? false : true,
       // disableXvfb: false,
     });
-    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setViewport({ width: 970, height: 900 });
     await ipCheck(page as PageWithCursor);
     this.page = page;
     this.cleanup = await setupCleanup(browser, page);
