@@ -1,7 +1,6 @@
 import "@dotenvx/dotenvx/config";
-import { error, log } from "console";
+import { log } from "console";
 import { extractGADMData } from "./lib/extract-gadm-data";
-import { gracefulShutdown, restartContainer } from "./lib/scrape";
 import { getActiveSettings } from "./lib/settings";
 import { Geometry } from "./service/geometry";
 import { GridRepository } from "./service/grid-repositroy";
@@ -39,15 +38,8 @@ if (existingCellsCount === 0) {
   );
 }
 
-try {
-  await SCRAPER.initialize();
-} catch (err) {
-  error("Failed to initialize scraper:", err);
-  await restartContainer();
-  await gracefulShutdown();
-}
+await SCRAPER.initialize();
 
-log("Starting grid scraping...");
 while (true) {
   const result = await SCRAPER.processNextCell();
   if (!result) break;
