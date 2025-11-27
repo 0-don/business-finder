@@ -11,6 +11,7 @@ services:
     restart: always
     volumes:
       - ~/business-finder-stream/:/app/stream
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5437/${POSTGRES_DB}
       - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
@@ -32,7 +33,7 @@ services:
       - OPENVPN_USER=${OPENVPN_USER}
       - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
       - OPENVPN_CIPHERS=AES-256-GCM
-      - SERVER_COUNTRIES=germany
+      # - SERVER_COUNTRIES=germany
       - LOG_LEVEL=debug
     extra_hosts:
       - "host.docker.internal:host-gateway"

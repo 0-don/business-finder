@@ -7,7 +7,6 @@
     "start": "tsx src/main.ts",
     "dev": "tsx watch src/main.ts",
     "serve": "tsx src/server.ts",
-    "scrape": "tsx watch src/scrape.ts",
     "drizzle": "npm run reset && drizzle-kit generate",
     "reset": "tsx ./drizzle/reset-db.ts"
   },
@@ -17,12 +16,14 @@
     "better-sqlite3": "12.4.6",
     "cli-progress": "3.12.0",
     "dayjs": "1.11.19",
+    "dockerode": "^4.0.9",
     "drizzle-orm": "0.44.7",
     "puppeteer-real-browser": "1.4.4",
     "unzipper": "0.12.3"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "1.51.1",
+    "@types/dockerode": "latest",
     "@types/better-sqlite3": "7.6.13",
     "@types/cli-progress": "3.11.6",
     "@types/node": "24.10.1",

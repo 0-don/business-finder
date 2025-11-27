@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { PageWithCursor } from "puppeteer-real-browser";
 import type { Browser } from "rebrowser-puppeteer-core";
+import { docker, VPN_CONATAINER_NAME } from "./constants";
 
 interface BusinessDetails {
   id: string;
@@ -15,20 +16,41 @@ interface BusinessDetails {
   website: string | null;
 }
 
+export async function canProceedWithScraping(
+  page: PageWithCursor
+): Promise<boolean> {
+  try {
+    await page.waitForSelector('[role="feed"]', { timeout: 5000 });
+
+    return await page.evaluate(() => {
+      const searchFeed = document.querySelector('[role="feed"]');
+      if (!searchFeed) return false;
+
+      const hasArticles =
+        document.querySelectorAll('[role="article"]').length > 0;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+      const isScrollable = scrollHeight > clientHeight;
+
+      return hasArticles || isScrollable;
+    });
+  } catch (error) {
+    return false;
+  }
+}
+
 export async function extractBusinessDetails(
   page: PageWithCursor
 ): Promise<BusinessDetails[]> {
-  const result = await page.evaluate(() => {
+  return await page.evaluate(() => {
     const articles = document.querySelectorAll('[role="article"]');
     const businesses: BusinessDetails[] = [];
-    const debugInfo: any[] = [];
 
-    articles.forEach((article, index) => {
+    articles.forEach((article) => {
       try {
         const name = article.getAttribute("aria-label")?.trim();
         if (!name) return;
 
-        // Extract ID from Google Maps URL
         let id = "";
         const linkElement = article.querySelector('a[href*="/maps/place/"]');
         if (linkElement) {
@@ -43,38 +65,19 @@ export async function extractBusinessDetails(
             .replace(/[^a-z0-9]/g, "-")
             .substring(0, 50);
 
-        // Extract reviews
         let reviewScore: number | null = null;
         let reviewCount: number | null = null;
         const starElement = article.querySelector(
           '[role="img"][aria-label*="stars"]'
         );
-
-        // Collect debug info for star elements
         if (starElement) {
-          debugInfo.push({
-            businessIndex: index,
-            businessName: name,
-            starElementHTML: starElement.outerHTML,
-            ariaLabel: starElement.getAttribute("aria-label"),
-            parentHTML: starElement.parentElement?.outerHTML,
-          });
-
           const ariaLabel = starElement.getAttribute("aria-label") || "";
           const scoreMatch = ariaLabel.match(/(\d+\.?\d*)\s+stars/);
-          const countMatch =
-            ariaLabel.match(/(\d+(?:,\d+)*)\s+[Rr]eviews?/) ||
-            ariaLabel.match(/(\d+(?:,\d+)*)\s+reviews?/) ||
-            ariaLabel.match(/(\d+(?:,\d+)*)\s+review/) ||
-            ariaLabel.match(/(\d+(?:,\d+)*)\s+ratings?/i);
-
+          const countMatch = ariaLabel.match(/(\d+)\s+[Rr]eviews?/);
           if (scoreMatch) reviewScore = parseFloat(scoreMatch[1]!);
-          if (countMatch) {
-            reviewCount = parseInt(countMatch[1]!.replace(/,/g, ""));
-          }
+          if (countMatch) reviewCount = parseInt(countMatch[1]!);
         }
 
-        // Extract business type and address using · separator pattern
         let businessType: string | null = null;
         let address: string | null = null;
 
@@ -111,7 +114,6 @@ export async function extractBusinessDetails(
           }
         }
 
-        // Extract phone
         const phoneMatch = article.textContent?.match(
           /\b0\d{2,3}[\s\-]?\d{4,8}\b/
         );
@@ -120,7 +122,6 @@ export async function extractBusinessDetails(
             ? phoneMatch[0].trim()
             : null;
 
-        // Extract website
         let website: string | null = null;
         const websiteButton = article.querySelector(
           '[aria-label*="website" i], [aria-label*="Visit" i]'
@@ -162,66 +163,10 @@ export async function extractBusinessDetails(
       }
     });
 
-    return { businesses, debugInfo };
+    return businesses;
   });
-
-  // Log debug info in Node.js console
-  console.log(
-    `\n=== STAR ELEMENT DEBUG INFO (${result.debugInfo.length} businesses with stars) ===`
-  );
-  result.debugInfo.forEach((debug) => {
-    console.log(
-      `\n--- Business ${debug.businessIndex}: ${debug.businessName} ---`
-    );
-    console.log("Star element HTML:", debug.starElementHTML);
-    console.log("Aria-label:", debug.ariaLabel);
-    console.log("Parent HTML:", debug.parentHTML);
-    console.log("---");
-  });
-
-  return result.businesses;
 }
 
-export async function scrollToLoadAll(page: PageWithCursor): Promise<boolean> {
-  let loadingCount = 0;
-
-  while (loadingCount < 10) {
-    if (
-      await page.evaluate(
-        () =>
-          document.body.textContent?.includes(
-            "You've reached the end of the list."
-          ) ?? false
-      )
-    ) {
-      return true;
-    }
-
-    const isLoading = await page.evaluate(() =>
-      Array.from(document.querySelectorAll("*")).some((el) => {
-        const styles = window.getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
-        return (
-          styles.animationName?.includes("container-rotate") &&
-          styles.animationPlayState === "running" &&
-          rect.width > 0 &&
-          rect.height > 0 &&
-          rect.top < window.innerHeight &&
-          rect.bottom > 0
-        );
-      })
-    );
-
-    if (isLoading) loadingCount++;
-
-    await page.evaluate(() =>
-      document.querySelector('[role="feed"]')?.scrollTo(0, 999999)
-    );
-    await new Promise((resolve) => setTimeout(resolve, 3500));
-  }
-
-  return false;
-}
 
 export async function setupCleanup(browser: Browser, page: PageWithCursor) {
   await browser.setCookie(
@@ -230,7 +175,7 @@ export async function setupCleanup(browser: Browser, page: PageWithCursor) {
       value: "YES+cb.20210630-14-p0.en+FX+700",
       domain: ".google.com",
       path: "/",
-      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year from now
+      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
       size: 0,
       httpOnly: false,
       secure: true,
@@ -241,7 +186,7 @@ export async function setupCleanup(browser: Browser, page: PageWithCursor) {
       value: "CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg",
       domain: ".google.com",
       path: "/",
-      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year from now
+      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
       size: 0,
       httpOnly: false,
       secure: true,
@@ -260,10 +205,9 @@ export async function setupCleanup(browser: Browser, page: PageWithCursor) {
     process.exit(0);
   };
 
-  // Set up signal handlers
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
-  process.on("SIGUSR2", cleanup); // tsx watch restart signal
+  process.on("SIGUSR2", cleanup);
 
   return cleanup;
 }
@@ -287,17 +231,11 @@ export const startStream = async (page: PageWithCursor): Promise<void> => {
     }
   };
 
-  // Take screenshot every 2 seconds
   setInterval(captureScreenshot, 2000);
 };
 
 export function isRunningInDocker(): boolean {
-  // Check for .dockerenv file
-  if (existsSync("/.dockerenv")) {
-    return true;
-  }
-
-  // Check cgroup (works for most Docker setups)
+  if (existsSync("/.dockerenv")) return true;
   try {
     const cgroup = require("fs").readFileSync("/proc/1/cgroup", "utf8");
     return cgroup.includes("docker") || cgroup.includes("kubepods");
@@ -316,9 +254,29 @@ export const ipCheck = async (
     ).json();
     log("IP:", ip);
   } catch (_) {
-    if (count > 5) throw new Error("Failed to get IP");
-    await new Promise((r) => setTimeout(r, 2000));
+    if (count > 10) {
+      await restartContainer();
+      await gracefulShutdown(1);
+    }
+    await new Promise((r) => setTimeout(r, 3000));
     log("ipCheck: ", count);
     return await ipCheck(page, count + 1);
+  }
+};
+
+export async function gracefulShutdown(exitCode: number = 0) {
+  if (!process.env.DOCKER) return;
+  log("Shutting down gracefully...");
+  process.exit(exitCode);
+}
+
+export const restartContainer = async () => {
+  if (!process.env.DOCKER) return;
+  try {
+    const container = docker.getContainer(VPN_CONATAINER_NAME);
+    await container.restart();
+    log(`Container ${VPN_CONATAINER_NAME} restarted successfully`);
+  } catch (error) {
+    log(`Failed to restart container ${VPN_CONATAINER_NAME}: ${error}`);
   }
 };

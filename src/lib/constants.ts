@@ -1,6 +1,13 @@
+import Docker from "dockerode";
 import type { CountryCode } from "../types";
 
+export const docker = new Docker({ socketPath: "/var/run/docker.sock" });
+
 export const BATCH_SIZE = 100;
+
+export const VPN_CONATAINER_NAME = "business-finder-vpn";
+export const END_OF_SCROLL = "You've reached the end of the list.";
+
 export const ZIP_PATH = "./gadm_410-gpkg.zip";
 export const GPKG_PATH = "./gadm_410.gpkg";
 export const DOWNLOAD_URL =

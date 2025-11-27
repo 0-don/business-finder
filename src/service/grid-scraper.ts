@@ -2,16 +2,19 @@ import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
 import { execSync } from "child_process";
 import { error, log } from "console";
 import dayjs from "dayjs";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { Page } from "puppeteer";
 import { connect, PageWithCursor } from "puppeteer-real-browser";
 import { db } from "../db";
 import { businessSchema } from "../db/schema";
+import { END_OF_SCROLL } from "../lib/constants";
 import {
+  canProceedWithScraping,
   extractBusinessDetails,
+  gracefulShutdown,
   ipCheck,
   isRunningInDocker,
-  scrollToLoadAll,
+  restartContainer,
   setupCleanup,
   startStream,
 } from "../lib/scrape";
@@ -35,6 +38,7 @@ export class GridScraper {
   private repo: GridRepository;
   private page: PageWithCursor | undefined;
   private cleanup: (() => Promise<void>) | undefined;
+  private errorCount: number = 0;
 
   constructor(private settings: SettingsConfig) {
     this.repo = new GridRepository(settings);
@@ -51,18 +55,25 @@ export class GridScraper {
     } catch {}
 
     const { page, browser } = await connect({
-      headless: process.env.DOCKER ? true : false,
+      headless: false,
       turnstile: true,
-      disableXvfb: process.env.DOCKER ? false : true,
+      // disableXvfb: process.env.DOCKER ? false : true,
+      disableXvfb: false,
     });
+    await page.setViewport({ width: 1920, height: 1080 });
     await ipCheck(page as PageWithCursor);
     this.page = page;
     this.cleanup = await setupCleanup(browser, page);
     await startStream(page);
 
-    PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).then((b) =>
-      b.enableBlockingInPage(page as unknown as Page)
-    );
+    try {
+      const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
+      await blocker.enableBlockingInPage(page as unknown as Page);
+    } catch (err) {
+      error("Failed to initialize adblocker:", err);
+      await restartContainer();
+      await gracefulShutdown();
+    }
   }
 
   async processNextCell(): Promise<{
@@ -79,102 +90,127 @@ export class GridScraper {
       `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} (L${cellData.level}) - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
     );
 
-    try {
-      const businesses = await this.scrapeCell(cellData);
-      const savedCount = await this.saveBusinesses(businesses, cellData);
-      await this.repo.markProcessed(cell.id);
+    const businessCount = await this.scrapeCell(cellData);
+    await this.repo.markProcessed(cell.id);
 
-      log(`Cell ${cell.id} complete: ${savedCount} new businesses saved`);
-      return { cellId: cell.id, businessCount: savedCount };
-    } catch (err) {
-      error(`Error processing cell ${cell.id}:`, err);
-      throw err;
+    log(`Cell ${cell.id} complete: ${businessCount} businesses processed`);
+    return { cellId: cell.id, businessCount };
+  }
+
+  private async scrapeCell(cellData: CellData): Promise<number> {
+    const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},11z?hl=en`;
+
+    while (true) {
+      await this.page?.goto(url, { timeout: 15000 });
+
+      try {
+        return await this.scrollAndSave(cellData);
+      } catch (err: unknown) {
+        this.errorCount++;
+        const message = err instanceof Error ? err.message : String(err);
+        error(
+          `Error processing cell ${cellData.id} (attempt ${this.errorCount}): ${message}`
+        );
+        if (this.errorCount >= 3) {
+          await this.restartVPN();
+        }
+      }
     }
   }
 
-  private async scrapeCell(cellData: CellData): Promise<BusinessDetails[]> {
-    const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},11z?hl=en`;
+  private async scrollAndSave(cellData: CellData): Promise<number> {
+    const seenBusinessIds = new Set<string>();
+    let isLoadingCount = 0;
 
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        await this.page?.goto(url, { timeout: 15000 });
-
-        if (await scrollToLoadAll(this.page!)) {
-          return await extractBusinessDetails(this.page!);
-        }
-
-        log(`Infinite loading detected for cell ${cellData.id}, retrying...`);
-        retries--;
-      } catch (err) {
-        error(
-          `Attempt failed for cell ${cellData.id}, ${retries - 1} retries left`
-        );
-        retries--;
-        if (retries === 0) throw err;
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+    while (true) {
+      if (!(await canProceedWithScraping(this.page!))) {
+        throw new Error("Cannot proceed with scraping");
       }
+
+      const businesses = await extractBusinessDetails(this.page!);
+      const uniqueBusinesses = businesses.filter((business) => {
+        if (seenBusinessIds.has(business.id)) return false;
+        seenBusinessIds.add(business.id);
+        return true;
+      });
+
+      if (uniqueBusinesses.length > 0) {
+        await this.saveBusinesses(uniqueBusinesses, cellData);
+      }
+
+      const isAtEnd = await this.page!.evaluate((endOfScrollText) => {
+        return document.body.textContent?.includes(endOfScrollText) ?? false;
+      }, END_OF_SCROLL);
+
+      if (isAtEnd) break;
+
+      await this.page!.evaluate(() =>
+        document.querySelector('[role="feed"]')?.scrollTo(0, 999999)
+      );
+      await new Promise((r) => setTimeout(r, 3500));
+
+      const isLoading = await this.page?.evaluate(() =>
+        Array.from(document.querySelectorAll("*")).some((el) => {
+          const styles = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return (
+            styles.animationName?.includes("container-rotate") &&
+            styles.animationPlayState === "running" &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.top < window.innerHeight &&
+            rect.bottom > 0
+          );
+        })
+      );
+
+      if (isLoading) isLoadingCount += 1;
+      if (isLoadingCount >= 3) throw new Error("Loading seems to be stuck");
     }
 
-    return [];
+    return seenBusinessIds.size;
   }
 
   private async saveBusinesses(
     businesses: BusinessDetails[],
     cellData: CellData
-  ): Promise<number> {
-    let savedCount = 0;
-
+  ): Promise<void> {
     for (const business of businesses) {
       try {
-        const [existing] = await db
-          .select({ placeId: businessSchema.placeId })
-          .from(businessSchema)
-          .where(eq(businessSchema.placeId, business.id))
-          .limit(1);
-
-        if (existing) continue;
-
         await db
           .insert(businessSchema)
           .values({
             placeId: business.id,
             name: business.name,
-            address: business.address || business.businessType || "",
-            vicinity: business.address || null,
-            formattedAddress: business.address || null,
+            address: business.address || "",
             rating: business.reviewScore || null,
             userRatingsTotal: business.reviewCount || 0,
             location: sql`ST_Point(${cellData.lng}, ${cellData.lat}, 4326)`,
-            businessStatus: null,
             types: business.businessType ? [business.businessType] : null,
-            openingHours: null,
-            photos: null,
-            plusCode: null,
-            icon: null,
-            iconBackgroundColor: null,
-            iconMaskBaseUri: null,
-            priceLevel: null,
             website: business.website || null,
             phoneNumber: business.phone || null,
-            internationalPhoneNumber: null,
-            utcOffset: null,
             settingsId: this.settings.id,
           })
           .onConflictDoNothing();
-
-        savedCount++;
       } catch (err) {
         error(`Error saving business ${business.name}:`, err);
       }
     }
-
-    return savedCount;
   }
 
   async destroy(): Promise<void> {
     if (this.cleanup) {
       await this.cleanup();
     }
+  }
+
+  private async restartVPN(): Promise<void> {
+    log("Restarting VPN container...");
+    try {
+      await restartContainer();
+    } catch (err) {
+      error("Failed to restart VPN container:", err);
+    }
+    await gracefulShutdown(1);
   }
 }
