@@ -1,11 +1,19 @@
 import { error } from "console";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { countries, gridCellSchema } from "../db/schema";
 import { Bounds, CountryCode, Point, SettingsConfig, Viewport } from "../types";
 
 export class GridRepository {
   constructor(private settings: SettingsConfig) {}
+  async getExistingCellsCount(): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(gridCellSchema)
+      .where(eq(gridCellSchema.settingsId, this.settings.id));
+
+    return result?.count || 0;
+  }
 
   async getBounds(countryCode: CountryCode): Promise<Bounds> {
     const [result] = await db

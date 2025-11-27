@@ -1,4 +1,5 @@
 import "@dotenvx/dotenvx/config";
+import { log } from "console";
 import { extractGADMData } from "./lib/extract-gadm-data";
 import { getActiveSettings } from "./lib/settings";
 import { Geometry } from "./service/geometry";
@@ -13,20 +14,33 @@ const SCRAPER = new GridScraper(SETTINGS);
 
 await extractGADMData(SETTINGS);
 
-const bounds = await REPO.getBounds(SETTINGS.countryCode);
-const candidates = Geometry.generateHexGrid(bounds, RADIUS);
-const valid = await REPO.validatePoints(
-  candidates,
-  RADIUS,
-  SETTINGS.countryCode
-);
+const existingCellsCount = await REPO.getExistingCellsCount();
 
-if (valid.length) {
-  await REPO.insertCells(valid.map((center) => ({ center, radius: RADIUS })));
+if (existingCellsCount === 0) {
+  log("No existing grid cells found, generating new grid...");
+  const bounds = await REPO.getBounds(SETTINGS.countryCode);
+  const candidates = Geometry.generateHexGrid(bounds, RADIUS);
+
+  const valid = await REPO.validatePoints(
+    candidates,
+    RADIUS,
+    SETTINGS.countryCode
+  );
+  log(`Generated ${candidates.length} candidate grid cells.`);
+
+  if (valid.length) {
+    await REPO.insertCells(valid.map((center) => ({ center, radius: RADIUS })));
+  }
+  log(`Inserted ${valid.length} grid cells into the database.`);
+} else {
+  log(
+    `Found ${existingCellsCount} existing grid cells, skipping grid generation.`
+  );
 }
 
 await SCRAPER.initialize();
 
+log("Starting grid scraping...");
 while (true) {
   const result = await SCRAPER.processNextCell();
   if (!result) break;
@@ -36,4 +50,4 @@ while (true) {
 }
 
 await SCRAPER.destroy();
-console.log("Grid scraping complete!");
+log("Grid scraping complete!");

@@ -1,4 +1,5 @@
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import dayjs from "dayjs";
 import { eq, sql } from "drizzle-orm";
 import { Page } from "puppeteer";
 import { connect } from "puppeteer-real-browser";
@@ -60,7 +61,7 @@ export class GridScraper {
     if (!cellData) return null;
 
     console.log(
-      `Processing cell ${cell.id} (L${cellData.level}) - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
+      `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} (L${cellData.level}) - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
     );
 
     try {

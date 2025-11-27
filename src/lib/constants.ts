@@ -1,7 +1,5 @@
-import { Client } from "@googlemaps/google-maps-services-js";
-import type { CountryCode, PlaceType } from "../types";
 
-export const CLIENT = new Client();
+import type { CountryCode, PlaceType } from "../types";
 
 export const BATCH_SIZE = 100;
 export const ZIP_PATH = "./gadm_410-gpkg.zip";
