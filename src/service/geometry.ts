@@ -1,13 +1,6 @@
-import * as turf from "@turf/turf";
 import { Bounds, Point } from "../types";
 
 export class Geometry {
-  static distance(p1: Point, p2: Point): number {
-    const from = turf.point([p1.lng, p1.lat]);
-    const to = turf.point([p2.lng, p2.lat]);
-    return turf.distance(from, to, { units: "meters" });
-  }
-
   static toDegrees(meters: number, lat = 0) {
     return {
       lat: (meters * 360) / 40008000,

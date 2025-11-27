@@ -4,19 +4,15 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "tsx src/index.ts",
-    "dev": "tsx watch src/dev.ts",
+    "dev": "tsx watch src/main.ts",
     "serve": "tsx src/server.ts",
     "scrape": "tsx watch src/scrape.ts",
     "drizzle": "npm run reset && drizzle-kit generate",
     "reset": "tsx ./drizzle/reset-db.ts"
   },
   "dependencies": {
-    "@duckduckgo/autoconsent": "^14.37.3",
     "@ghostery/adblocker-puppeteer": "2.12.5",
-    "@googlemaps/google-maps-services-js": "3.4.2",
     "@ngageoint/geopackage": "4.2.6",
-    "@turf/turf": "7.3.0",
     "better-sqlite3": "12.4.6",
     "cli-progress": "3.12.0",
     "dayjs": "1.11.19",

@@ -13,7 +13,7 @@ WORKDIR /app
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 
-CMD ["bun", "run", "serve"]
+CMD ["bun", "serve"]
 
 ############################################
 
@@ -24,4 +24,4 @@ WORKDIR /app
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 
-CMD ["bun", "start"]
+CMD ["bun", "dev"]
