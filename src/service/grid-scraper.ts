@@ -57,8 +57,8 @@ export class GridScraper {
     const { page, browser } = await connect({
       headless: false,
       turnstile: true,
-      // disableXvfb: process.env.DOCKER ? false : true,
-      disableXvfb: true,
+      disableXvfb: process.env.DOCKER ? false : true,
+      // disableXvfb: false,
     });
     await page.setViewport({ width: 1920, height: 1080 });
     await ipCheck(page as PageWithCursor);
@@ -95,7 +95,9 @@ export class GridScraper {
     const businessCount = await this.scrapeCell(cellData);
     await this.repo.markProcessed(cell.id);
 
-    log(`${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${businessCount} businesses processed`);
+    log(
+      `${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${businessCount} businesses processed`
+    );
     return { cellId: cell.id, businessCount };
   }
 
