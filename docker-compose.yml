@@ -34,9 +34,11 @@ services:
       dockerfile: Dockerfile
       target: business-finder-worker
     restart: always
+    volumes:
+      - ~/business-finder-stream/:/app/stream
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}/${POSTGRES_DB}
-      
+
       - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
       - DOCKER=true

@@ -10,6 +10,7 @@ import {
   extractBusinessDetails,
   scrollToLoadAll,
   setupCleanup,
+  startStream,
 } from "../lib/scrape";
 import { SettingsConfig } from "../types";
 import { GridRepository } from "./grid-repositroy";
@@ -45,6 +46,7 @@ export class GridScraper {
 
     this.page = page;
     this.cleanup = await setupCleanup(browser, page);
+    await startStream(page);
 
     PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).then((b) =>
       b.enableBlockingInPage(page as unknown as Page)

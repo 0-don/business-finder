@@ -26,8 +26,8 @@ jobs:
           echo DEFAULT_COUNTRY_CODE="DEU" >> .env
           echo DEFAULT_PLACE_TYPE="steuerberater" >> .env
 
-      - name: Reset DB
-        run: docker stop business-finder-db || true && docker rm business-finder-db || true
+      # - name: Reset DB
+      #   run: docker stop business-finder-db || true && docker rm business-finder-db || true
 
       - name: Docker run
         run: docker compose up -d --force-recreate --build

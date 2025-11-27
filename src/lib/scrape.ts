@@ -1,3 +1,5 @@
+import { mkdirSync } from "fs";
+import { join, resolve } from "path";
 import { PageWithCursor } from "puppeteer-real-browser";
 import type { Browser } from "rebrowser-puppeteer-core";
 
@@ -230,3 +232,26 @@ export async function setupCleanup(browser: Browser, page: PageWithCursor) {
 
   return cleanup;
 }
+
+export const startStream = async (page: PageWithCursor): Promise<void> => {
+  if (process.platform === "win32") return;
+  
+  const streamDir = join(resolve(), "stream");
+  mkdirSync(streamDir, { recursive: true });
+
+  const captureScreenshot = async () => {
+    try {
+      await page.screenshot({
+        path: "./stream/page.jpg",
+        optimizeForSpeed: true,
+        type: 'jpeg',
+        quality: 80
+      });
+    } catch (error) {
+      // Silently handle errors during screenshot capture
+    }
+  };
+
+  // Take screenshot every 2 seconds
+  setInterval(captureScreenshot, 2000);
+};
