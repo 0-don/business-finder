@@ -17,11 +17,12 @@ interface BusinessDetails {
 export async function extractBusinessDetails(
   page: PageWithCursor
 ): Promise<BusinessDetails[]> {
-  return await page.evaluate(() => {
+  const result = await page.evaluate(() => {
     const articles = document.querySelectorAll('[role="article"]');
     const businesses: BusinessDetails[] = [];
+    const debugInfo: any[] = [];
 
-    articles.forEach((article) => {
+    articles.forEach((article, index) => {
       try {
         const name = article.getAttribute("aria-label")?.trim();
         if (!name) return;
@@ -47,17 +48,29 @@ export async function extractBusinessDetails(
         const starElement = article.querySelector(
           '[role="img"][aria-label*="stars"]'
         );
-        console.log("Star element HTML:", starElement?.outerHTML);
-        console.log(
-          "Star element aria-label:",
-          starElement?.getAttribute("aria-label")
-        );
+
+        // Collect debug info for star elements
         if (starElement) {
+          debugInfo.push({
+            businessIndex: index,
+            businessName: name,
+            starElementHTML: starElement.outerHTML,
+            ariaLabel: starElement.getAttribute("aria-label"),
+            parentHTML: starElement.parentElement?.outerHTML,
+          });
+
           const ariaLabel = starElement.getAttribute("aria-label") || "";
           const scoreMatch = ariaLabel.match(/(\d+\.?\d*)\s+stars/);
-          const countMatch = ariaLabel.match(/(\d+)\s+[Rr]eviews?/);
+          const countMatch =
+            ariaLabel.match(/(\d+(?:,\d+)*)\s+[Rr]eviews?/) ||
+            ariaLabel.match(/(\d+(?:,\d+)*)\s+reviews?/) ||
+            ariaLabel.match(/(\d+(?:,\d+)*)\s+review/) ||
+            ariaLabel.match(/(\d+(?:,\d+)*)\s+ratings?/i);
+
           if (scoreMatch) reviewScore = parseFloat(scoreMatch[1]!);
-          if (countMatch) reviewCount = parseInt(countMatch[1]!);
+          if (countMatch) {
+            reviewCount = parseInt(countMatch[1]!.replace(/,/g, ""));
+          }
         }
 
         // Extract business type and address using · separator pattern
@@ -148,8 +161,24 @@ export async function extractBusinessDetails(
       }
     });
 
-    return businesses;
+    return { businesses, debugInfo };
   });
+
+  // Log debug info in Node.js console
+  console.log(
+    `\n=== STAR ELEMENT DEBUG INFO (${result.debugInfo.length} businesses with stars) ===`
+  );
+  result.debugInfo.forEach((debug) => {
+    console.log(
+      `\n--- Business ${debug.businessIndex}: ${debug.businessName} ---`
+    );
+    console.log("Star element HTML:", debug.starElementHTML);
+    console.log("Aria-label:", debug.ariaLabel);
+    console.log("Parent HTML:", debug.parentHTML);
+    console.log("---");
+  });
+
+  return result.businesses;
 }
 
 export async function scrollToLoadAll(page: PageWithCursor): Promise<boolean> {
