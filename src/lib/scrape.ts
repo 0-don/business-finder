@@ -48,6 +48,11 @@ export async function extractBusinessDetails(
           '[role="img"][aria-label*="stars"]'
         );
         if (starElement) {
+          console.log("Star element HTML:", starElement.outerHTML);
+          console.log(
+            "Star element aria-label:",
+            starElement.getAttribute("aria-label")
+          );
           const ariaLabel = starElement.getAttribute("aria-label") || "";
           const scoreMatch = ariaLabel.match(/(\d+\.?\d*)\s+stars/);
           const countMatch = ariaLabel.match(/(\d+)\s+[Rr]eviews?/);
@@ -235,7 +240,7 @@ export async function setupCleanup(browser: Browser, page: PageWithCursor) {
 
 export const startStream = async (page: PageWithCursor): Promise<void> => {
   if (process.platform === "win32") return;
-  
+
   const streamDir = join(resolve(), "stream");
   mkdirSync(streamDir, { recursive: true });
 
@@ -244,8 +249,8 @@ export const startStream = async (page: PageWithCursor): Promise<void> => {
       await page.screenshot({
         path: "./stream/page.jpg",
         optimizeForSpeed: true,
-        type: 'jpeg',
-        quality: 80
+        type: "jpeg",
+        quality: 80,
       });
     } catch (error) {
       // Silently handle errors during screenshot capture
