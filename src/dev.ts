@@ -1,26 +1,23 @@
 import "@dotenvx/dotenvx/config";
 import { extractGADMData } from "./lib/extract-gadm-data";
 import { getActiveSettings } from "./lib/settings";
-import { CellProcessor } from "./service/cell-processor";
-import { GridGenerator } from "./service/grid-generator";
+import { GridScraper } from "./service/grid-scraper";
 
 const settings = await getActiveSettings();
 await extractGADMData(settings);
 
-const processor = new CellProcessor(settings);
-const generator = new GridGenerator(settings);
+const scraper = new GridScraper(settings);
+await scraper.initialize();
 
-// await generator.split(1);
-// await generator.split(2);
-// await generator.split(3);
-// await generator.split(4);
-// await generator.split(5);
+console.log("Starting grid scraping...");
 
 while (true) {
-  const result = await processor.processNext();
-  console.log(result);
+  const result = await scraper.processNextCell();
   if (!result) break;
-  if (result.needsSplit) await generator.split(result.cellId);
+
+  // Add delay between cells to avoid being blocked
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 }
 
-console.log("Processing complete!");
+await scraper.destroy();
+console.log("Grid scraping complete!");

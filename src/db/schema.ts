@@ -1,8 +1,3 @@
-import {
-  Language,
-  PlaceType1,
-  PlaceType2,
-} from "@googlemaps/google-maps-services-js";
 import { relations } from "drizzle-orm";
 import {
   boolean,
@@ -19,21 +14,9 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
-import {
-  COUNTRY_CODES,
-  MAXIMUM_RADIUS,
-  MINIMIUM_RADIUS,
-} from "../lib/constants";
+import { COUNTRY_CODES } from "../lib/constants";
 
 export const countryCodeEnum = pgEnum("country_code", COUNTRY_CODES);
-export const languageEnum = pgEnum(
-  "language",
-  Object.values(Language) as [`${Language}`, ...`${Language}`[]]
-);
-export const placeTypeEnum = pgEnum("place_type", [
-  ...Object.values(PlaceType1),
-  ...Object.values(PlaceType2),
-] as [`${PlaceType1 | PlaceType2}`, ...`${PlaceType1 | PlaceType2}`[]]);
 
 const geometry = customType<{ data: string }>({
   dataType() {
@@ -52,11 +35,7 @@ export const settingsSchema = pgTable(
   {
     id: serial("id").primaryKey(),
     countryCode: countryCodeEnum("country_code").notNull(),
-    language: languageEnum("language").notNull(),
-    placeType: placeTypeEnum("place_type").notNull(),
-    keywords: text("keywords").array().notNull(),
-    maxRadius: doublePrecision("max_radius").default(MAXIMUM_RADIUS),
-    minRadius: doublePrecision("min_radius").default(MINIMIUM_RADIUS),
+    placeType: varchar("place_type").notNull(),
     isActive: boolean("is_active").default(true),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at")
@@ -66,9 +45,7 @@ export const settingsSchema = pgTable(
   (table) => [
     uniqueIndex("idx_settings_unique_config").on(
       table.countryCode,
-      table.language,
-      table.placeType,
-      table.keywords
+      table.placeType
     ),
     index("idx_settings_active_lookup").on(table.countryCode, table.isActive),
   ]

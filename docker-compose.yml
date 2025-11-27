@@ -16,10 +16,7 @@ services:
       - GOOGLE_MAPS_JAVASCRIPT_API=${GOOGLE_MAPS_JAVASCRIPT_API}
 
       - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
-      - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
-      - DEFAULT_KEYWORDS=${DEFAULT_KEYWORDS}
-
       - DOCKER=true
     labels:
       - "traefik.enable=true"
@@ -44,9 +41,7 @@ services:
       - GOOGLE_MAPS_JAVASCRIPT_API=${GOOGLE_MAPS_JAVASCRIPT_API}
 
       - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
-      - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
-      - DEFAULT_KEYWORDS=${DEFAULT_KEYWORDS}
   business-finder-db:
     container_name: business-finder-db
     image: postgis/postgis:latest

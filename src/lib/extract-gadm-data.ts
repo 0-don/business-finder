@@ -55,7 +55,12 @@ async function downloadGADMZip(): Promise<void> {
     },
   });
 
-  await pipeline(response.body, progressTransform, createWriteStream(ZIP_PATH));
+  await pipeline(
+    response.body as import("stream/web").ReadableStream<unknown>,
+    progressTransform,
+    createWriteStream(ZIP_PATH)
+  );
+
   downloadBar.stop();
 }
 

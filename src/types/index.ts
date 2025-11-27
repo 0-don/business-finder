@@ -6,7 +6,6 @@ import type {
 } from "../db/schema";
 
 export type CountryCode = (typeof countryCodeEnum.enumValues)[number];
-export type Language = (typeof languageEnum.enumValues)[number];
 export type PlaceType = (typeof placeTypeEnum.enumValues)[number];
 
 export type Subdivision = {
@@ -19,11 +18,8 @@ export type Subdivision = {
 export interface SettingsConfig {
   id: number;
   countryCode: CountryCode;
-  language: Language;
   placeType: PlaceType;
-  keywords: string[];
-  maxRadius: number;
-  minRadius: number;
+
 }
 
 export interface Point {
