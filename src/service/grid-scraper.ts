@@ -1,8 +1,9 @@
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import { error, log } from "console";
 import dayjs from "dayjs";
 import { eq, sql } from "drizzle-orm";
 import { Page } from "puppeteer";
-import { connect } from "puppeteer-real-browser";
+import { connect, PageWithCursor } from "puppeteer-real-browser";
 import { db } from "../db";
 import { businessSchema } from "../db/schema";
 import {
@@ -26,8 +27,7 @@ interface BusinessDetails {
 
 export class GridScraper {
   private repo: GridRepository;
-  private page: any;
-  private browser: any;
+  private page: PageWithCursor | undefined;
   private cleanup: (() => Promise<void>) | undefined;
 
   constructor(private settings: SettingsConfig) {
@@ -36,13 +36,12 @@ export class GridScraper {
 
   async initialize(): Promise<void> {
     const { page, browser } = await connect({
-      headless: false,
+      headless: process.env.DOCKER ? true : false,
       turnstile: true,
-      disableXvfb: true,
+      disableXvfb: process.env.DOCKER ? false : true,
     });
 
     this.page = page;
-    this.browser = browser;
     this.cleanup = await setupCleanup(browser, page);
 
     PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch).then((b) =>
@@ -60,7 +59,7 @@ export class GridScraper {
     const cellData = await this.repo.getCell(cell.id);
     if (!cellData) return null;
 
-    console.log(
+    log(
       `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} (L${cellData.level}) - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
     );
 
@@ -69,12 +68,10 @@ export class GridScraper {
       const savedCount = await this.saveBusinesses(businesses, cellData);
       await this.repo.markProcessed(cell.id);
 
-      console.log(
-        `Cell ${cell.id} complete: ${savedCount} new businesses saved`
-      );
+      log(`Cell ${cell.id} complete: ${savedCount} new businesses saved`);
       return { cellId: cell.id, businessCount: savedCount };
-    } catch (error) {
-      console.error(`Error processing cell ${cell.id}:`, error);
+    } catch (err) {
+      error(`Error processing cell ${cell.id}:`, err);
       throw error;
     }
   }
@@ -85,18 +82,16 @@ export class GridScraper {
     let retries = 3;
     while (retries > 0) {
       try {
-        await this.page.goto(url, { timeout: 15000 });
+        await this.page?.goto(url, { timeout: 15000 });
 
-        if (await scrollToLoadAll(this.page)) {
-          return await extractBusinessDetails(this.page);
+        if (await scrollToLoadAll(this.page!)) {
+          return await extractBusinessDetails(this.page!);
         }
 
-        console.log(
-          `Infinite loading detected for cell ${cellData.id}, retrying...`
-        );
+        log(`Infinite loading detected for cell ${cellData.id}, retrying...`);
         retries--;
-      } catch (error) {
-        console.error(
+      } catch (err) {
+        error(
           `Attempt failed for cell ${cellData.id}, ${retries - 1} retries left`
         );
         retries--;
@@ -153,8 +148,8 @@ export class GridScraper {
           .onConflictDoNothing();
 
         savedCount++;
-      } catch (error) {
-        console.error(`Error saving business ${business.name}:`, error);
+      } catch (err) {
+        error(`Error saving business ${business.name}:`, err);
       }
     }
 
