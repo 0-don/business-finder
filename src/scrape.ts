@@ -1,9 +1,12 @@
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import { error, log } from "console";
 import { Page } from "puppeteer";
 import { connect } from "puppeteer-real-browser";
-import { setupCleanup } from "./lib/scrape/cleanup";
-import { extractBusinessDetails } from "./lib/scrape/extract";
-import { scrollToLoadAll } from "./lib/scrape/scroll";
+import {
+  extractBusinessDetails,
+  scrollToLoadAll,
+  setupCleanup,
+} from "./lib/scrape";
 
 const { page, browser } = await connect({
   headless: false,
@@ -30,15 +33,15 @@ while (true) {
           index === self.findIndex((b) => b.id === business.id)
       );
 
-      console.log(JSON.stringify(uniqueBusinesses, null, 2));
-      console.log(
+      log(JSON.stringify(uniqueBusinesses, null, 2));
+      log(
         `Extracted ${uniqueBusinesses.length} unique businesses (${businesses.length - uniqueBusinesses.length} duplicates removed)`
       );
       break;
     }
 
-    console.log("Infinite loading detected, retrying...");
-  } catch (error) {
-    console.error("Attempt failed, retrying");
+    log("Infinite loading detected, retrying...");
+  } catch {
+    error("Attempt failed, retrying");
   }
 }

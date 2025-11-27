@@ -1,7 +1,7 @@
 import { error } from "console";
-import { and, eq, not, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { businessSchema, countries, gridCellSchema } from "../db/schema";
+import { countries, gridCellSchema } from "../db/schema";
 import { Bounds, CountryCode, Point, SettingsConfig, Viewport } from "../types";
 
 export class GridRepository {
@@ -51,8 +51,7 @@ export class GridRepository {
   }
 
   async insertCells(
-    circles: Array<{ center: Point; radius: number }>,
-    level: number
+    circles: Array<{ center: Point; radius: number }>
   ): Promise<void> {
     if (!circles.length) return;
 
@@ -66,7 +65,7 @@ export class GridRepository {
           center: sql`ST_Point(${c.center.lng}, ${c.center.lat}, 4326)`,
           radiusMeters: c.radius,
           circle: sql`ST_Buffer(ST_Point(${c.center.lng}, ${c.center.lat}, 4326)::geography, ${c.radius})::geometry`,
-          level,
+          level: 0,
           settingsId: this.settings.id,
         }))
       );
@@ -122,34 +121,6 @@ export class GridRepository {
       );
   }
 
-  async getObstacles(center: Point, searchRadius: number, excludeId?: number) {
-    return db
-      .select({
-        center: {
-          lng: sql<number>`ST_X(${gridCellSchema.center})`,
-          lat: sql<number>`ST_Y(${gridCellSchema.center})`,
-        },
-        radius: gridCellSchema.radiusMeters,
-      })
-      .from(gridCellSchema)
-      .where(
-        excludeId
-          ? and(
-              not(eq(gridCellSchema.id, excludeId)),
-              sql`ST_DWithin(
-              ${gridCellSchema.center}::geography,
-              ST_Point(${center.lng}, ${center.lat}, 4326)::geography,
-              ${searchRadius}
-            )`
-            )
-          : sql`ST_DWithin(
-            ${gridCellSchema.center}::geography,
-            ST_Point(${center.lng}, ${center.lat}, 4326)::geography,
-            ${searchRadius}
-          )`
-      );
-  }
-
   async deleteCell(cellId: number): Promise<void> {
     await db.delete(gridCellSchema).where(eq(gridCellSchema.id, cellId));
   }
@@ -169,52 +140,11 @@ export class GridRepository {
     return cell;
   }
 
-  async updateProgress(
-    cellId: number,
-    page: number,
-    token: string | null
-  ): Promise<void> {
-    await db
-      .update(gridCellSchema)
-      .set({ currentPage: page, nextPageToken: token, updatedAt: new Date() })
-      .where(eq(gridCellSchema.id, cellId));
-  }
-
   async markProcessed(cellId: number): Promise<void> {
     await db
       .update(gridCellSchema)
       .set({ isProcessed: true, updatedAt: new Date() })
       .where(eq(gridCellSchema.id, cellId));
-  }
-
-  async getBusinessCount(cellId: number): Promise<number> {
-    const [result] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(businessSchema)
-      .where(
-        sql`ST_Within(
-        ${businessSchema.location}, 
-        (SELECT circle FROM grid_cell WHERE id = ${cellId})
-      )`
-      );
-    return result?.count || 0;
-  }
-
-  async getTotalCount(): Promise<number> {
-    const [result] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(gridCellSchema)
-      .where(eq(gridCellSchema.settingsId, this.settings.id));
-    return result?.count || 0;
-  }
-
-  async getMinRadius(): Promise<number | null> {
-    const [result] = await db
-      .select({ min: sql<number>`MIN(${gridCellSchema.radiusMeters})` })
-      .from(gridCellSchema)
-      .where(eq(gridCellSchema.settingsId, this.settings.id))
-      .limit(1);
-    return result?.min || null;
   }
 
   async getCountryGeometry() {
