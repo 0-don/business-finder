@@ -47,12 +47,12 @@ export async function extractBusinessDetails(
         const starElement = article.querySelector(
           '[role="img"][aria-label*="stars"]'
         );
+        console.log("Star element HTML:", starElement?.outerHTML);
+        console.log(
+          "Star element aria-label:",
+          starElement?.getAttribute("aria-label")
+        );
         if (starElement) {
-          console.log("Star element HTML:", starElement.outerHTML);
-          console.log(
-            "Star element aria-label:",
-            starElement.getAttribute("aria-label")
-          );
           const ariaLabel = starElement.getAttribute("aria-label") || "";
           const scoreMatch = ariaLabel.match(/(\d+\.?\d*)\s+stars/);
           const countMatch = ariaLabel.match(/(\d+)\s+[Rr]eviews?/);
