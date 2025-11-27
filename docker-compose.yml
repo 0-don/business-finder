@@ -32,7 +32,7 @@ services:
       - VPN_SERVICE_PROVIDER=mullvad
       - VPN_TYPE=wireguard
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
-      - WIREGUARD_ADDRESSES="10.71.184.246/32"
+      - WIREGUARD_ADDRESSES="10.69.189.141/32"
       # - SERVER_COUNTRIES=germany
       - LOG_LEVEL=debug
     extra_hosts:
