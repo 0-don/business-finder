@@ -1,4 +1,5 @@
 import { PageWithCursor } from "puppeteer-real-browser";
+import type { Browser } from "rebrowser-puppeteer-core";
 
 interface BusinessDetails {
   id: string;
@@ -142,4 +143,90 @@ export async function extractBusinessDetails(
 
     return businesses;
   });
+}
+
+export async function scrollToLoadAll(page: PageWithCursor): Promise<boolean> {
+  let loadingCount = 0;
+
+  while (loadingCount < 10) {
+    if (
+      await page.evaluate(
+        () =>
+          document.body.textContent?.includes(
+            "You've reached the end of the list."
+          ) ?? false
+      )
+    ) {
+      return true;
+    }
+
+    const isLoading = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("*")).some((el) => {
+        const styles = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return (
+          styles.animationName?.includes("container-rotate") &&
+          styles.animationPlayState === "running" &&
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.top < window.innerHeight &&
+          rect.bottom > 0
+        );
+      })
+    );
+
+    if (isLoading) loadingCount++;
+
+    await page.evaluate(() =>
+      document.querySelector('[role="feed"]')?.scrollTo(0, 999999)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+  }
+
+  return false;
+}
+
+export async function setupCleanup(browser: Browser, page: PageWithCursor) {
+  await browser.setCookie(
+    {
+      name: "CONSENT",
+      value: "YES+cb.20210630-14-p0.en+FX+700",
+      domain: ".google.com",
+      path: "/",
+      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year from now
+      size: 0,
+      httpOnly: false,
+      secure: true,
+      session: false,
+    },
+    {
+      name: "SOCS",
+      value: "CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg",
+      domain: ".google.com",
+      path: "/",
+      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year from now
+      size: 0,
+      httpOnly: false,
+      secure: true,
+      session: false,
+    }
+  );
+
+  const cleanup = async () => {
+    console.log("Cleaning up browser...");
+    try {
+      if (page) await page.close();
+      if (browser) await browser.close();
+    } catch (error) {
+      console.error("Error during cleanup:", error);
+    }
+    process.exit(0);
+  };
+
+  // Set up signal handlers
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
+  process.on("SIGUSR2", cleanup); // tsx watch restart signal
+
+  return cleanup;
 }

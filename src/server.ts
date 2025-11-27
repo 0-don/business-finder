@@ -1,8 +1,8 @@
 import "@dotenvx/dotenvx/config";
 import { readFileSync } from "fs";
 import { createServer, IncomingMessage, ServerResponse } from "http";
-import { GridRepository } from "./lib/grid-repositroy";
 import { getActiveSettings } from "./lib/settings";
+import { GridRepository } from "./service/grid-repositroy";
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.DOCKER ? ("0.0.0.0" as const) : ("localhost" as const);

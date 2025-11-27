@@ -4,11 +4,11 @@ import { Page } from "puppeteer";
 import { connect } from "puppeteer-real-browser";
 import { db } from "../db";
 import { businessSchema } from "../db/schema";
-import { GridRepository } from "../lib/grid-repositroy";
 import { setupCleanup } from "../lib/scrape/cleanup";
 import { extractBusinessDetails } from "../lib/scrape/extract";
 import { scrollToLoadAll } from "../lib/scrape/scroll";
 import { SettingsConfig } from "../types";
+import { GridRepository } from "./grid-repositroy";
 
 interface BusinessDetails {
   id: string;

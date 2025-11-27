@@ -1,9 +1,9 @@
 import "@dotenvx/dotenvx/config";
 import { log } from "console";
 import { extractGADMData } from "./lib/extract-gadm-data";
-import { GridRepository } from "./lib/grid-repositroy";
 import { getActiveSettings } from "./lib/settings";
 import { Geometry } from "./service/geometry";
+import { GridRepository } from "./service/grid-repositroy";
 
 const settings = await getActiveSettings();
 await extractGADMData(settings);
