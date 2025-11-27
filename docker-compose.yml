@@ -19,6 +19,7 @@ services:
       - DOCKER=true
 
   business-finder-vpn:
+    # normal badger
     container_name: business-finder-vpn
     restart: always
     network_mode: bridge
