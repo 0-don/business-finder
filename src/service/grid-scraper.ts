@@ -8,12 +8,14 @@ import { db } from "../db";
 import { businessSchema } from "../db/schema";
 import {
   extractBusinessDetails,
+  isRunningInDocker,
   scrollToLoadAll,
   setupCleanup,
   startStream,
 } from "../lib/scrape";
 import { SettingsConfig } from "../types";
 import { GridRepository } from "./grid-repositroy";
+import { execSync } from "child_process";
 
 interface BusinessDetails {
   id: string;
@@ -38,6 +40,15 @@ export class GridScraper {
   }
 
   async initialize(): Promise<void> {
+    try {
+      if (isRunningInDocker()) {
+        execSync("rm -rf /tmp/lighthouse.* /tmp/puppeteer* 2>/dev/null", {
+          timeout: 60000,
+        });
+        log("Cleaned up temp folders on startup");
+      }
+    } catch {}
+
     const { page, browser } = await connect({
       headless: process.env.DOCKER ? true : false,
       turnstile: true,

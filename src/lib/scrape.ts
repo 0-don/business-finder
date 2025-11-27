@@ -1,4 +1,4 @@
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { PageWithCursor } from "puppeteer-real-browser";
 import type { Browser } from "rebrowser-puppeteer-core";
@@ -289,3 +289,18 @@ export const startStream = async (page: PageWithCursor): Promise<void> => {
   // Take screenshot every 2 seconds
   setInterval(captureScreenshot, 2000);
 };
+
+export function isRunningInDocker(): boolean {
+  // Check for .dockerenv file
+  if (existsSync("/.dockerenv")) {
+    return true;
+  }
+
+  // Check cgroup (works for most Docker setups)
+  try {
+    const cgroup = require("fs").readFileSync("/proc/1/cgroup", "utf8");
+    return cgroup.includes("docker") || cgroup.includes("kubepods");
+  } catch {
+    return false;
+  }
+}

@@ -26,6 +26,9 @@ jobs:
           echo DEFAULT_COUNTRY_CODE="DEU" >> .env
           echo DEFAULT_PLACE_TYPE="steuerberater" >> .env
 
+          echo OPENVPN_USER=${{ secrets.OPENVPN_USER }} >> .env
+          echo OPENVPN_PASSWORD=${{ secrets.OPENVPN_PASSWORD }} >> .env
+
       # - name: Reset DB
       #   run: docker stop business-finder-db || true && docker rm business-finder-db || true
 
