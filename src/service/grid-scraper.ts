@@ -25,6 +25,8 @@ interface BusinessDetails {
   website: string | null;
 }
 
+type CellData = NonNullable<Awaited<ReturnType<GridRepository["getCell"]>>>;
+
 export class GridScraper {
   private repo: GridRepository;
   private page: PageWithCursor | undefined;
@@ -72,11 +74,11 @@ export class GridScraper {
       return { cellId: cell.id, businessCount: savedCount };
     } catch (err) {
       error(`Error processing cell ${cell.id}:`, err);
-      throw error;
+      throw err;
     }
   }
 
-  private async scrapeCell(cellData: any): Promise<BusinessDetails[]> {
+  private async scrapeCell(cellData: CellData): Promise<BusinessDetails[]> {
     const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},11z?hl=en`;
 
     let retries = 3;
@@ -95,7 +97,7 @@ export class GridScraper {
           `Attempt failed for cell ${cellData.id}, ${retries - 1} retries left`
         );
         retries--;
-        if (retries === 0) throw error;
+        if (retries === 0) throw err;
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
@@ -105,7 +107,7 @@ export class GridScraper {
 
   private async saveBusinesses(
     businesses: BusinessDetails[],
-    cellData: any
+    cellData: CellData
   ): Promise<number> {
     let savedCount = 0;
 

@@ -1,12 +1,7 @@
 import type { SQL } from "drizzle-orm";
-import type {
-  countryCodeEnum,
-  languageEnum,
-  placeTypeEnum,
-} from "../db/schema";
+import type { countryCodeEnum } from "../db/schema";
 
 export type CountryCode = (typeof countryCodeEnum.enumValues)[number];
-export type PlaceType = (typeof placeTypeEnum.enumValues)[number];
 
 export type Subdivision = {
   uid: number;
@@ -18,8 +13,7 @@ export type Subdivision = {
 export interface SettingsConfig {
   id: number;
   countryCode: CountryCode;
-  placeType: PlaceType;
-
+  placeType: string;
 }
 
 export interface Point {
