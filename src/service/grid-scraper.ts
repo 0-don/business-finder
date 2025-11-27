@@ -1,4 +1,5 @@
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import { execSync } from "child_process";
 import { error, log } from "console";
 import dayjs from "dayjs";
 import { eq, sql } from "drizzle-orm";
@@ -8,6 +9,7 @@ import { db } from "../db";
 import { businessSchema } from "../db/schema";
 import {
   extractBusinessDetails,
+  ipCheck,
   isRunningInDocker,
   scrollToLoadAll,
   setupCleanup,
@@ -15,7 +17,6 @@ import {
 } from "../lib/scrape";
 import { SettingsConfig } from "../types";
 import { GridRepository } from "./grid-repositroy";
-import { execSync } from "child_process";
 
 interface BusinessDetails {
   id: string;
@@ -54,7 +55,7 @@ export class GridScraper {
       turnstile: true,
       disableXvfb: process.env.DOCKER ? false : true,
     });
-
+    await ipCheck(page as PageWithCursor);
     this.page = page;
     this.cleanup = await setupCleanup(browser, page);
     await startStream(page);

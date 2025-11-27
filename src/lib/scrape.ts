@@ -1,3 +1,4 @@
+import { log } from "console";
 import { existsSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { PageWithCursor } from "puppeteer-real-browser";
@@ -304,3 +305,20 @@ export function isRunningInDocker(): boolean {
     return false;
   }
 }
+
+export const ipCheck = async (
+  page: PageWithCursor,
+  count: number = 1
+): Promise<unknown> => {
+  try {
+    const { ip } = await (
+      await fetch("https://api.ipify.org?format=json")
+    ).json();
+    log("IP:", ip);
+  } catch (_) {
+    if (count > 5) throw new Error("Failed to get IP");
+    await new Promise((r) => setTimeout(r, 2000));
+    log("ipCheck: ", count);
+    return await ipCheck(page, count + 1);
+  }
+};
