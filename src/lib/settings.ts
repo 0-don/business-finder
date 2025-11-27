@@ -1,12 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { settingsSchema } from "../db/schema";
-import { CountryCode, PlaceType, SettingsConfig } from "../types";
+import { CountryCode, SettingsConfig } from "../types";
 import { DEFAULT_COUNTRY_CODE, DEFAULT_PLACE_TYPE } from "./constants";
 
 export async function getActiveSettings(
   countryCode: CountryCode = DEFAULT_COUNTRY_CODE,
-  placeType: PlaceType = DEFAULT_PLACE_TYPE
+  placeType: string = DEFAULT_PLACE_TYPE
 ): Promise<SettingsConfig> {
   const [existing] = await db
     .select()
