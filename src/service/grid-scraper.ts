@@ -80,7 +80,7 @@ export class GridScraper {
   }
 
   private async scrapeCell(cellData: any): Promise<BusinessDetails[]> {
-    const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},15z?hl=en`;
+    const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},11z?hl=en`;
 
     let retries = 3;
     while (retries > 0) {
