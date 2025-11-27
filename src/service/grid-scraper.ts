@@ -81,7 +81,7 @@ export class GridScraper {
     businessCount: number;
   } | null> {
     this.errorCount = 0;
-    
+
     const cell = await this.repo.getNextUnprocessed();
     if (!cell) return null;
 
@@ -149,7 +149,7 @@ export class GridScraper {
       await this.page!.evaluate(() =>
         document.querySelector('[role="feed"]')?.scrollTo(0, 999999)
       );
-      await new Promise((r) => setTimeout(r, 3500));
+      await new Promise((r) => setTimeout(r, 5000));
 
       const isLoading = await this.page?.evaluate(() =>
         Array.from(document.querySelectorAll("*")).some((el) => {
