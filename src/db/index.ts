@@ -3,8 +3,6 @@ import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { resolve } from "path";
 import postgres from "postgres";
-import { extractGADMData } from "../lib/extract-gadm-data";
-import { getActiveSettings } from "../lib/settings";
 
 export const db = drizzlePostgres(
   postgres(process.env.DATABASE_URL, { onnotice: () => {} })
@@ -55,15 +53,9 @@ export async function createPostgreIndexes() {
   `);
 }
 
-if (!process.env.DOCKER) {
-  await migrate(db, { migrationsFolder: resolve("drizzle") })
-    .then(async () => {
-      await createPostgreIndexes();
-      const settings = await getActiveSettings();
-      await extractGADMData(settings);
-    })
-    .catch((err) => {
-      console.error("Error during migration or seeding:", err);
-      process.exit(1);
-    });
-}
+await migrate(db, { migrationsFolder: resolve("drizzle") })
+  .then(createPostgreIndexes)
+  .catch((err) => {
+    console.error("Error during migration or seeding:", err);
+    process.exit(1);
+  });
