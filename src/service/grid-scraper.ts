@@ -58,7 +58,7 @@ export class GridScraper {
       headless: false,
       turnstile: true,
       // disableXvfb: process.env.DOCKER ? false : true,
-      disableXvfb: false,
+      disableXvfb: true,
     });
     await page.setViewport({ width: 1920, height: 1080 });
     await ipCheck(page as PageWithCursor);
@@ -80,6 +80,8 @@ export class GridScraper {
     cellId: number;
     businessCount: number;
   } | null> {
+    this.errorCount = 0;
+    
     const cell = await this.repo.getNextUnprocessed();
     if (!cell) return null;
 
