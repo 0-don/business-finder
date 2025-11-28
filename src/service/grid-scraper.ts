@@ -58,7 +58,6 @@ export class GridScraper {
       headless: false,
       turnstile: true,
       disableXvfb: process.env.DOCKER ? false : true,
-      // disableXvfb: false,
     });
     await page.setViewport({ width: 970, height: 900 });
     await ipCheck(page as PageWithCursor);
@@ -79,6 +78,7 @@ export class GridScraper {
   async processNextCell(): Promise<{
     cellId: number;
     businessCount: number;
+    newBusinessCount: number;
   } | null> {
     this.errorCount = 0;
 
@@ -92,16 +92,22 @@ export class GridScraper {
       `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
     );
 
-    const businessCount = await this.scrapeCell(cellData);
+    const result = await this.scrapeCell(cellData);
     await this.repo.markProcessed(cell.id);
 
     log(
-      `${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${businessCount} businesses processed`
+      `${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${result.found} businesses found, ${result.inserted} new businesses added`
     );
-    return { cellId: cell.id, businessCount };
+    return {
+      cellId: cell.id,
+      businessCount: result.found,
+      newBusinessCount: result.inserted,
+    };
   }
 
-  private async scrapeCell(cellData: CellData): Promise<number> {
+  private async scrapeCell(
+    cellData: CellData
+  ): Promise<{ found: number; inserted: number }> {
     const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},11z?hl=en`;
 
     while (true) {
@@ -122,9 +128,12 @@ export class GridScraper {
     }
   }
 
-  private async scrollAndSave(cellData: CellData): Promise<number> {
+  private async scrollAndSave(
+    cellData: CellData
+  ): Promise<{ found: number; inserted: number }> {
     const seenBusinessIds = new Set<string>();
     let isLoadingCount = 0;
+    let totalInserted = 0;
 
     while (true) {
       if (!(await canProceedWithScraping(this.page!))) {
@@ -139,7 +148,11 @@ export class GridScraper {
       });
 
       if (uniqueBusinesses.length > 0) {
-        await this.saveBusinesses(uniqueBusinesses, cellData);
+        const saveResult = await this.saveBusinesses(
+          uniqueBusinesses,
+          cellData
+        );
+        totalInserted += saveResult.inserted;
       }
 
       const isAtEnd = await this.page!.evaluate((endOfScrollText) => {
@@ -172,16 +185,18 @@ export class GridScraper {
       if (isLoadingCount >= 3) throw new Error("Loading seems to be stuck");
     }
 
-    return seenBusinessIds.size;
+    return { found: seenBusinessIds.size, inserted: totalInserted };
   }
 
   private async saveBusinesses(
     businesses: BusinessDetails[],
     cellData: CellData
-  ): Promise<void> {
+  ): Promise<{ attempted: number; inserted: number }> {
+    let insertedCount = 0;
+
     for (const business of businesses) {
       try {
-        await db
+        const result = await db
           .insert(businessSchema)
           .values({
             placeId: business.id,
@@ -195,11 +210,18 @@ export class GridScraper {
             phoneNumber: business.phone || null,
             settingsId: this.settings.id,
           })
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .returning({ id: businessSchema.id });
+
+        if (result.length > 0) {
+          insertedCount++;
+        }
       } catch (err) {
         error(`Error saving business ${business.name}:`, err);
       }
     }
+
+    return { attempted: businesses.length, inserted: insertedCount };
   }
 
   async destroy(): Promise<void> {
