@@ -215,10 +215,10 @@ export class GridScraper {
           .onConflictDoUpdate({
             target: businessSchema.placeId,
             set: {
-              name: business.name,
-              address: business.address || "",
-              rating: business.reviewScore || null,
-              userRatingsTotal: business.reviewCount || 0,
+              name: sql`COALESCE(NULLIF(${business.name}, ''), ${businessSchema.name})`,
+              address: sql`COALESCE(NULLIF(${business.address || ""}, ''), ${businessSchema.address})`,
+              rating: sql`COALESCE(${business.reviewScore}, ${businessSchema.rating})`,
+              userRatingsTotal: sql`COALESCE(${business.reviewCount}, ${businessSchema.userRatingsTotal})`,
               location: sql`ST_Point(${cellData.lng}, ${cellData.lat}, 4326)`,
               types: newType
                 ? sql`
@@ -230,8 +230,8 @@ export class GridScraper {
                   END
                 `
                 : businessSchema.types,
-              website: business.website || null,
-              phoneNumber: business.phone || null,
+              website: sql`COALESCE(NULLIF(${business.website || ""}, ''), ${businessSchema.website})`,
+              phoneNumber: sql`COALESCE(NULLIF(${business.phone || ""}, ''), ${businessSchema.phoneNumber})`,
               updatedAt: new Date(),
             },
           })
@@ -247,7 +247,7 @@ export class GridScraper {
 
     return { attempted: businesses.length, inserted: insertedCount };
   }
-  
+
   async destroy(): Promise<void> {
     if (this.cleanup) {
       await this.cleanup();
