@@ -213,6 +213,11 @@ export class GridScraper {
           .onConflictDoUpdate({
             target: businessSchema.placeId,
             set: {
+              name: business.name,
+              address: business.address || "",
+              rating: business.reviewScore || null,
+              userRatingsTotal: business.reviewCount || 0,
+              location: sql`ST_Point(${cellData.lng}, ${cellData.lat}, 4326)`,
               types: sql`CASE 
               WHEN ${businessSchema.types} IS NULL THEN ${business.businessType ? [business.businessType] : null}::jsonb
               WHEN ${business.businessType} IS NULL THEN ${businessSchema.types}
@@ -220,6 +225,8 @@ export class GridScraper {
                 THEN ${businessSchema.types} || ${business.businessType}::text::jsonb
               ELSE ${businessSchema.types}
             END`,
+              website: business.website || null,
+              phoneNumber: business.phone || null,
               updatedAt: new Date(),
             },
           })
