@@ -25,6 +25,7 @@ jobs:
 
           echo DEFAULT_COUNTRY_CODE="DEU" >> .env
           echo DEFAULT_PLACE_TYPE="steuerberater" >> .env
+          echo RADIUS=3500 >> .env
 
           echo WIREGUARD_PRIVATE_KEY=${{ secrets.WIREGUARD_PRIVATE_KEY }} >> .env
 
