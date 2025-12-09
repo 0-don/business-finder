@@ -196,6 +196,8 @@ export class GridScraper {
 
     for (const business of businesses) {
       try {
+        const newType = business.businessType;
+
         const result = await db
           .insert(businessSchema)
           .values({
@@ -205,7 +207,7 @@ export class GridScraper {
             rating: business.reviewScore || null,
             userRatingsTotal: business.reviewCount || 0,
             location: sql`ST_Point(${cellData.lng}, ${cellData.lat}, 4326)`,
-            types: business.businessType ? [business.businessType] : null,
+            types: newType ? [newType] : null,
             website: business.website || null,
             phoneNumber: business.phone || null,
             settingsId: this.settings.id,
@@ -218,13 +220,16 @@ export class GridScraper {
               rating: business.reviewScore || null,
               userRatingsTotal: business.reviewCount || 0,
               location: sql`ST_Point(${cellData.lng}, ${cellData.lat}, 4326)`,
-              types: sql`CASE 
-              WHEN ${businessSchema.types} IS NULL THEN ${business.businessType ? [business.businessType] : null}::jsonb
-              WHEN ${business.businessType} IS NULL THEN ${businessSchema.types}
-              WHEN NOT ${businessSchema.types} ? ${business.businessType} 
-                THEN ${businessSchema.types} || ${business.businessType}::text::jsonb
-              ELSE ${businessSchema.types}
-            END`,
+              types: newType
+                ? sql`
+                  CASE 
+                    WHEN ${businessSchema.types} IS NULL THEN ${JSON.stringify([newType])}::jsonb
+                    WHEN NOT ${businessSchema.types} ? ${newType}
+                      THEN ${businessSchema.types} || ${JSON.stringify([newType])}::jsonb
+                    ELSE ${businessSchema.types}
+                  END
+                `
+                : businessSchema.types,
               website: business.website || null,
               phoneNumber: business.phone || null,
               updatedAt: new Date(),
@@ -242,7 +247,7 @@ export class GridScraper {
 
     return { attempted: businesses.length, inserted: insertedCount };
   }
-
+  
   async destroy(): Promise<void> {
     if (this.cleanup) {
       await this.cleanup();
