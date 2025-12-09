@@ -73,7 +73,7 @@
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
           center: { lat: 51.1657, lng: 10.4515 },
-          zoom: 6,
+          zoom: 8,
           mapTypeId: google.maps.MapTypeId.HYBRID,
         });
 
@@ -124,7 +124,7 @@
       function isPointInCircle(point, center, radius) {
         const distance = google.maps.geometry.spherical.computeDistanceBetween(
           point,
-          new google.maps.LatLng(center.lat, center.lng)
+          new google.maps.LatLng(center.lat, center.lng),
         );
         return distance <= radius;
       }
@@ -138,7 +138,7 @@
             isPointInCircle(
               mouseLatLng,
               { lat: cellData.lat, lng: cellData.lng },
-              cellData.radius
+              cellData.radius,
             )
           ) {
             foundCell = cellData;
@@ -170,7 +170,7 @@
 
         try {
           const response = await fetch(
-            `/api/grid-cells?north=${ne.lat()}&south=${sw.lat()}&east=${ne.lng()}&west=${sw.lng()}&zoom=${zoom}`
+            `/api/grid-cells?north=${ne.lat()}&south=${sw.lat()}&east=${ne.lng()}&west=${sw.lng()}&zoom=${zoom}`,
           );
 
           if (!response.ok) throw new Error("Failed to fetch grid cells");
@@ -220,7 +220,7 @@
           const distance =
             google.maps.geometry.spherical.computeDistanceBetween(
               clickedPoints[0],
-              clickedPoints[1]
+              clickedPoints[1],
             );
 
           distanceLine = new google.maps.Polyline({
