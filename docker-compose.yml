@@ -40,7 +40,7 @@ services:
       - ~/business-finder-stream/:/app/stream
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5437/${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@business-finder-db:5432/${POSTGRES_DB}
       - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
       - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
       - DOCKER=true
@@ -59,11 +59,8 @@ services:
       - VPN_SERVICE_PROVIDER=mullvad
       - VPN_TYPE=wireguard
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
-      - WIREGUARD_ADDRESSES="10.71.184.246/32"
-      # - SERVER_COUNTRIES=germany
+      - WIREGUARD_ADDRESSES=10.71.184.246/32
       - LOG_LEVEL=debug
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   business-finder-db:
     container_name: business-finder-db
