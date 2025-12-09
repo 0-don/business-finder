@@ -5,6 +5,7 @@ declare namespace NodeJS {
     GOOGLE_MAPS_JAVASCRIPT_API: string;
 
     DEFAULT_COUNTRY_CODE?: import(".").CountryCode;
+    RADIUS?: string;
     DEFAULT_PLACE_TYPE?: string;
   }
 }

@@ -5,8 +5,7 @@ import { getActiveSettings } from "./lib/settings";
 import { Geometry } from "./service/geometry";
 import { GridRepository } from "./service/grid-repositroy";
 import { GridScraper } from "./service/grid-scraper";
-
-const RADIUS = 2500;
+import { RADIUS } from "./lib/constants";
 
 const SETTINGS = await getActiveSettings();
 const REPO = new GridRepository(SETTINGS);
@@ -24,7 +23,7 @@ if (existingCellsCount === 0) {
   const valid = await REPO.validatePoints(
     candidates,
     RADIUS,
-    SETTINGS.countryCode
+    SETTINGS.countryCode,
   );
   log(`Generated ${candidates.length} candidate grid cells.`);
 
@@ -34,7 +33,7 @@ if (existingCellsCount === 0) {
   log(`Inserted ${valid.length} grid cells into the database.`);
 } else {
   log(
-    `Found ${existingCellsCount} existing grid cells, skipping grid generation.`
+    `Found ${existingCellsCount} existing grid cells, skipping grid generation.`,
   );
 }
 

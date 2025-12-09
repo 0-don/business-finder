@@ -13,6 +13,7 @@ export const GPKG_PATH = "./gadm_410.gpkg";
 export const DOWNLOAD_URL =
   "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-gpkg.zip";
 
+export const RADIUS = Number(process.env.RADIUS) || 2500;
 export const DEFAULT_COUNTRY_CODE: CountryCode =
   process.env.DEFAULT_COUNTRY_CODE!;
 export const DEFAULT_PLACE_TYPE: string = process.env.DEFAULT_PLACE_TYPE!;
