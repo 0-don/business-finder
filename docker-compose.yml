@@ -1,4 +1,28 @@
 services:
+  business-finder-server:
+    container_name: business-finder-server
+    networks:
+      - proxy
+    depends_on:
+      - business-finder-db
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: business-finder-server
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}/${POSTGRES_DB}
+      - GOOGLE_MAPS_JAVASCRIPT_API=${GOOGLE_MAPS_JAVASCRIPT_API}
+
+      - DEFAULT_COUNTRY_CODE=${DEFAULT_COUNTRY_CODE}
+      - DEFAULT_PLACE_TYPE=${DEFAULT_PLACE_TYPE}
+      - DOCKER=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.business-finder-server.rule=Host(`business-finder.coding.global`)"
+      - "traefik.http.routers.business-finder-server.entrypoints=websecure"
+      - "traefik.http.routers.business-finder-server.tls.certresolver=letsencrypt"
+      - "traefik.http.services.business-finder-server.loadbalancer.server.port=3000"
   business-finder-worker:
     container_name: business-finder-worker
     network_mode: service:business-finder-vpn

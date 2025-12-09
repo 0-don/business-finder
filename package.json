@@ -11,27 +11,27 @@
     "reset": "tsx ./drizzle/reset-db.ts"
   },
   "dependencies": {
-    "@ghostery/adblocker-puppeteer": "2.12.5",
+    "@ghostery/adblocker-puppeteer": "2.13.0",
     "@ngageoint/geopackage": "4.2.6",
-    "better-sqlite3": "12.4.6",
+    "better-sqlite3": "12.5.0",
     "cli-progress": "3.12.0",
     "dayjs": "1.11.19",
     "dockerode": "^4.0.9",
-    "drizzle-orm": "0.44.7",
+    "drizzle-orm": "0.45.0",
     "puppeteer-real-browser": "1.4.4",
     "unzipper": "0.12.3"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "1.51.1",
-    "@types/dockerode": "latest",
+    "@types/dockerode": "3.3.47",
     "@types/better-sqlite3": "7.6.13",
     "@types/cli-progress": "3.11.6",
-    "@types/node": "24.10.1",
+    "@types/node": "24.10.2",
     "@types/unzipper": "0.10.11",
-    "drizzle-kit": "0.31.7",
+    "drizzle-kit": "0.31.8",
     "postgres": "3.4.7",
-    "prettier": "3.6.2",
-    "tsx": "4.20.6"
+    "prettier": "3.7.4",
+    "tsx": "4.21.0"
   },
   "peerDependencies": {
     "typescript": "5.9.3"
