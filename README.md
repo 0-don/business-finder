@@ -1,38 +1,36 @@
 # Business Finder
 
-A geospatial application that systematically discovers and catalogs businesses using Google Places API with adaptive grid-based search coverage.
-
-## Overview
-
-Business Finder uses an intelligent hexagonal grid system to comprehensively search geographic areas for businesses. It adaptively splits search cells when too many results are found, ensuring complete coverage while respecting API limits.
+A web scraper that systematically discovers and collects business data from Google Maps using hexagonal grid-based geographic coverage.
 
 ## Features
 
-- **Adaptive Grid Search**: Automatically adjusts search radius based on business density
-- **Complete Coverage**: Hexagonal grid pattern ensures no gaps in geographic coverage
-- **Interactive Map**: Real-time visualization of search grid and discovered businesses
-- **PostGIS Integration**: Advanced spatial queries for efficient data management
-- **Resumable**: Can pause and resume searches without losing progress
-- **Multi-country Support**: Works with any country using GADM boundary data
+- **Hexagonal Grid Coverage**: Generates non-overlapping hexagonal search cells for complete geographic coverage
+- **Automated Web Scraping**: Uses Puppeteer with ad-blocking and browser fingerprint evasion
+- **Resumable Progress**: Stores grid cells and scraping state in SQLite database
+- **Country-Based Searching**: Uses GADM boundary data to limit searches to specific countries
+- **Configurable**: Set search radius, country code, and place type via environment variables
 
-## Dump
+## Setup
 
-docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
-docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --column-inserts > grid_cell_inserts.sql
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-docker exec business-finder-db pg_dump -U postgres -d business-finder -t grid_cell --data-only --format=custom > grid_cell.dump
-docker exec postgres pg_dump -U postgres -d business-finder -t grid_cell --data-only --format=custom > grid_cell.dump
+2. Configure environment variables (see [.env.example](.env.example)):
+   - `DEFAULT_COUNTRY_CODE`: ISO 3166-1 alpha-3 country code (e.g., "DEU")
+   - `DEFAULT_PLACE_TYPE`: Google Maps place type (e.g., "accounting")
+   - `RADIUS`: Search radius in meters (default: 3500)
 
-## Restore
+3. Run the scraper:
+   ```bash
+   npm run dev
+   ```
 
-docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql
-docker exec -i business-finder-db psql -U postgres -d business-finder < grid_cell_inserts.sql
-docker exec -i postgres psql -U postgres -d business-finder < grid_cell_inserts.sql && clear && bun dev
+## How It Works
 
-docker exec -i postgres pg_restore -U postgres -d business-finder < grid_cell.dump
-
-# Install Chromium-Driver for Patchright
-
-npx patchright install chromium
-
-<!-- https://www.google.com/maps/search/steuerberater/@51.1657,10.4515,15z?hl=en -->
+1. Downloads GADM geographic boundary data for the specified country
+2. Generates hexagonal grid cells covering the country bounds
+3. Validates cells are within country boundaries
+4. Systematically scrapes Google Maps for each grid cell
+5. Stores results in SQLite database with GeoPackage support
