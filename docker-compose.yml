@@ -61,6 +61,7 @@ services:
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
       - WIREGUARD_ADDRESSES=10.71.184.246/32
       - LOG_LEVEL=debug
+      - DNS_ADDRESS=127.0.0.11 # THIS IS THE FIX - enables Docker DNS resolution
 
   business-finder-db:
     container_name: business-finder-db
