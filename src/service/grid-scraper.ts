@@ -89,14 +89,14 @@ export class GridScraper {
     if (!cellData) return null;
 
     log(
-      `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`
+      `${dayjs().format("HH:mm:ss")} Processing cell ${cell.id} - ${cellData.lat.toFixed(3)},${cellData.lng.toFixed(3)} :${cellData.radius}m`,
     );
 
     const result = await this.scrapeCell(cellData);
     await this.repo.markProcessed(cell.id);
 
     log(
-      `${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${result.found} businesses found, ${result.inserted} new businesses added`
+      `${dayjs().format("HH:mm:ss")} Cell ${cell.id} complete: ${result.found} businesses found, ${result.inserted} new businesses added`,
     );
     return {
       cellId: cell.id,
@@ -106,7 +106,7 @@ export class GridScraper {
   }
 
   private async scrapeCell(
-    cellData: CellData
+    cellData: CellData,
   ): Promise<{ found: number; inserted: number }> {
     const url = `https://www.google.com/maps/search/${encodeURIComponent(this.settings.placeType)}/@${cellData.lat},${cellData.lng},11z?hl=en`;
 
@@ -119,7 +119,7 @@ export class GridScraper {
         this.errorCount++;
         const message = err instanceof Error ? err.message : String(err);
         error(
-          `Error processing cell ${cellData.id} (attempt ${this.errorCount}): ${message}`
+          `Error processing cell ${cellData.id} (attempt ${this.errorCount}): ${message}`,
         );
         if (this.errorCount >= 3) {
           await this.restartVPN();
@@ -129,7 +129,7 @@ export class GridScraper {
   }
 
   private async scrollAndSave(
-    cellData: CellData
+    cellData: CellData,
   ): Promise<{ found: number; inserted: number }> {
     const seenBusinessIds = new Set<string>();
     let isLoadingCount = 0;
@@ -150,7 +150,7 @@ export class GridScraper {
       if (uniqueBusinesses.length > 0) {
         const saveResult = await this.saveBusinesses(
           uniqueBusinesses,
-          cellData
+          cellData,
         );
         totalInserted += saveResult.inserted;
       }
@@ -162,7 +162,7 @@ export class GridScraper {
       if (isAtEnd) break;
 
       await this.page!.evaluate(() =>
-        document.querySelector('[role="feed"]')?.scrollTo(0, 999999)
+        document.querySelector('[role="feed"]')?.scrollTo(0, 999999),
       );
       await new Promise((r) => setTimeout(r, 5000));
 
@@ -178,7 +178,7 @@ export class GridScraper {
             rect.top < window.innerHeight &&
             rect.bottom > 0
           );
-        })
+        }),
       );
 
       if (isLoading) isLoadingCount += 1;
@@ -190,7 +190,7 @@ export class GridScraper {
 
   private async saveBusinesses(
     businesses: BusinessDetails[],
-    cellData: CellData
+    cellData: CellData,
   ): Promise<{ attempted: number; inserted: number }> {
     let insertedCount = 0;
 
@@ -210,7 +210,19 @@ export class GridScraper {
             phoneNumber: business.phone || null,
             settingsId: this.settings.id,
           })
-          .onConflictDoNothing()
+          .onConflictDoUpdate({
+            target: businessSchema.placeId,
+            set: {
+              types: sql`CASE 
+              WHEN ${businessSchema.types} IS NULL THEN ${business.businessType ? [business.businessType] : null}::jsonb
+              WHEN ${business.businessType} IS NULL THEN ${businessSchema.types}
+              WHEN NOT ${businessSchema.types} ? ${business.businessType} 
+                THEN ${businessSchema.types} || ${business.businessType}::text::jsonb
+              ELSE ${businessSchema.types}
+            END`,
+              updatedAt: new Date(),
+            },
+          })
           .returning({ id: businessSchema.id });
 
         if (result.length > 0) {
